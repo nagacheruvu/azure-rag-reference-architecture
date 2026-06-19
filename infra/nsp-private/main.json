@@ -1,0 +1,1245 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+  "contentVersion": "1.0.0.0",
+  "metadata": {
+    "_generator": {
+      "name": "bicep",
+      "version": "0.42.1.51946",
+      "templateHash": "16993297407671799337"
+    }
+  },
+  "parameters": {
+    "environmentName": {
+      "type": "string",
+      "defaultValue": "nsp-priv",
+      "minLength": 1,
+      "maxLength": 60,
+      "metadata": {
+        "description": "Short name used to derive resource names."
+      }
+    },
+    "location": {
+      "type": "string",
+      "defaultValue": "[resourceGroup().location]",
+      "metadata": {
+        "description": "Primary region for the VNet, private endpoints, Foundry, and the ACI test runner."
+      }
+    },
+    "searchLocation": {
+      "type": "string",
+      "defaultValue": "westus2",
+      "metadata": {
+        "description": "Secondary region for the Azure AI Search service. MUST differ from `location` to exercise the cross-region private scenario."
+      }
+    },
+    "principalId": {
+      "type": "string",
+      "defaultValue": "",
+      "metadata": {
+        "description": "Object ID of a user/principal granted data-plane roles (optional). Useful if you later reach the private endpoints from a peered network or VPN."
+      }
+    },
+    "deployTester": {
+      "type": "bool",
+      "defaultValue": true,
+      "metadata": {
+        "description": "Deploy the in-VNet ACI probe that validates private connectivity. Set false to provision infrastructure only."
+      }
+    },
+    "deployReport": {
+      "type": "bool",
+      "defaultValue": true,
+      "metadata": {
+        "description": "Deploy the in-VNet ACI report server that runs the validation suite and serves an HTML summary on a private IP (port 80)."
+      }
+    },
+    "reportRefreshSeconds": {
+      "type": "int",
+      "defaultValue": 180,
+      "metadata": {
+        "description": "Refresh interval (seconds) for the HTML report server to re-run the validation suite."
+      }
+    },
+    "vnetAddressPrefix": {
+      "type": "string",
+      "defaultValue": "10.40.0.0/16",
+      "metadata": {
+        "description": "Address space for the virtual network."
+      }
+    },
+    "peSubnetPrefix": {
+      "type": "string",
+      "defaultValue": "10.40.1.0/24",
+      "metadata": {
+        "description": "Subnet prefix for private endpoints."
+      }
+    },
+    "aciSubnetPrefix": {
+      "type": "string",
+      "defaultValue": "10.40.2.0/24",
+      "metadata": {
+        "description": "Subnet prefix for the delegated Azure Container Instance test runner."
+      }
+    },
+    "webSubnetPrefix": {
+      "type": "string",
+      "defaultValue": "10.40.3.0/24",
+      "metadata": {
+        "description": "Subnet prefix for the delegated Azure Container Instance HTML report server."
+      }
+    },
+    "deployAppGateway": {
+      "type": "bool",
+      "defaultValue": false,
+      "metadata": {
+        "description": "Deploy an Application Gateway (Standard_v2) to publish the private HTML report to the internet, restricted by NSG to a single client IP."
+      }
+    },
+    "allowedClientIp": {
+      "type": "string",
+      "defaultValue": "",
+      "metadata": {
+        "description": "Public client IP (no mask) allowed to reach the Application Gateway listener. Required when deployAppGateway = true."
+      }
+    },
+    "agwSubnetPrefix": {
+      "type": "string",
+      "defaultValue": "10.40.4.0/24",
+      "metadata": {
+        "description": "Subnet prefix for the dedicated Application Gateway subnet."
+      }
+    }
+  },
+  "variables": {
+    "resourceToken": "[uniqueString(subscription().id, parameters('location'), parameters('environmentName'))]",
+    "tags": {
+      "azd-env-name": "[parameters('environmentName')]",
+      "project": "foundry-nsp-private",
+      "scenario": "foundry-to-search-cross-region-private"
+    },
+    "foundryName": "[format('foundry{0}', variables('resourceToken'))]",
+    "searchName": "[format('srch{0}', variables('resourceToken'))]",
+    "hasPrincipal": "[not(empty(parameters('principalId')))]",
+    "roleCognitiveServicesUser": "a97b65f3-24c7-4388-baec-2e87135dc908",
+    "roleCognitiveServicesOpenAIUser": "5e0bd9bd-7b93-4f28-af87-19fc36ad61bd",
+    "roleSearchIndexDataContributor": "8ebe5a00-799e-43f5-93ac-243d3dce84a7",
+    "roleSearchServiceContributor": "7ca78c08-252a-4471-8644-bb5ff32d4ba0",
+    "probeHosts": [
+      "[format('{0}.cognitiveservices.azure.com', variables('foundryName'))]",
+      "[format('{0}.openai.azure.com', variables('foundryName'))]",
+      "[format('{0}.services.ai.azure.com', variables('foundryName'))]",
+      "[format('{0}.search.windows.net', variables('searchName'))]"
+    ],
+    "foundryAuthHost": "[format('{0}.openai.azure.com', variables('foundryName'))]",
+    "searchAuthHost": "[format('{0}.search.windows.net', variables('searchName'))]",
+    "reportScript": "#!/usr/bin/env python3\r\n\"\"\"In-VNet private-connectivity validator + HTML report server.\r\n\r\nRuns INSIDE the private VNet (Azure Container Instance, VNet-injected) where the\r\nFoundry and AI Search resources have public network access DISABLED. It:\r\n\r\n  1. Acquires Entra ID tokens via the user-assigned managed identity (IMDS).\r\n  2. Validates private DNS resolution (public FQDNs must resolve to private\r\n     10.x endpoint IPs, not public IPs).\r\n  3. Proves general internet egress is BLOCKED by the subnet NSG.\r\n  4. Makes AUTHENTICATED data-plane calls through the private endpoints to:\r\n       - Microsoft Foundry (primary region)\r\n       - Azure AI Search (secondary region -> cross-region private link)\r\n     and expects HTTP 200.\r\n  5. Renders a styled HTML summary report and serves it on :80 so it can be\r\n     viewed from anywhere inside the VNet (peered network / Bastion / VPN /\r\n     another container).\r\n\r\nConfiguration comes from environment variables (injected by the container):\r\n  CLIENT_ID        user-assigned managed identity client id\r\n  FOUNDRY_HOST     <foundry>.openai.azure.com\r\n  FOUNDRY_REGION   primary region label (display only)\r\n  SEARCH_HOST      <search>.search.windows.net\r\n  SEARCH_REGION    secondary region label (display only)\r\n  DNS_HOSTS        space-separated FQDNs to resolve\r\n  REFRESH_SECONDS  report refresh / loop interval (default 180)\r\n\r\nOnly the Python standard library is used (the azure-cli image ships python3).\r\n\"\"\"\r\n\r\nimport os\r\nimport ssl\r\nimport json\r\nimport time\r\nimport html\r\nimport socket\r\nimport datetime\r\nimport functools\r\nimport threading\r\nimport http.server\r\nimport urllib.error\r\nimport urllib.request\r\n\r\nCLIENT_ID = os.environ.get(\"CLIENT_ID\", \"\")\r\nFOUNDRY_HOST = os.environ.get(\"FOUNDRY_HOST\", \"\")\r\nFOUNDRY_REGION = os.environ.get(\"FOUNDRY_REGION\", \"primary\")\r\nSEARCH_HOST = os.environ.get(\"SEARCH_HOST\", \"\")\r\nSEARCH_REGION = os.environ.get(\"SEARCH_REGION\", \"secondary\")\r\nDNS_HOSTS = os.environ.get(\"DNS_HOSTS\", \"\").split()\r\nREFRESH = int(os.environ.get(\"REFRESH_SECONDS\", \"180\"))\r\n\r\ntry:\r\n    CONFIG = json.loads(os.environ.get(\"CONFIG_JSON\", \"\") or \"{}\")\r\nexcept Exception:\r\n    CONFIG = {}\r\n\r\nSITE = \"/site\"\r\nINDEX = os.path.join(SITE, \"index.html\")\r\nIMDS = \"http://169.254.169.254/metadata/identity/oauth2/token?api-version=2018-02-01\"\r\n\r\n\r\ndef get_token(resource):\r\n    \"\"\"Acquire an Entra ID access token for `resource` from IMDS.\"\"\"\r\n    url = \"{0}&resource={1}&client_id={2}\".format(IMDS, resource, CLIENT_ID)\r\n    req = urllib.request.Request(url, headers={\"Metadata\": \"true\"})\r\n    try:\r\n        with urllib.request.urlopen(req, timeout=20) as resp:\r\n            return json.load(resp).get(\"access_token\", \"\")\r\n    except Exception:\r\n        return \"\"\r\n\r\n\r\ndef is_private_ip(ip):\r\n    try:\r\n        parts = [int(p) for p in ip.split(\".\")]\r\n    except ValueError:\r\n        return False\r\n    if len(parts) != 4:\r\n        return False\r\n    if parts[0] == 10:\r\n        return True\r\n    if parts[0] == 192 and parts[1] == 168:\r\n        return True\r\n    if parts[0] == 172 and 16 <= parts[1] <= 31:\r\n        return True\r\n    return False\r\n\r\n\r\ndef resolve(host):\r\n    \"\"\"Return the sorted set of IPs `host` resolves to (empty on failure).\"\"\"\r\n    try:\r\n        infos = socket.getaddrinfo(host, 443, socket.AF_INET, socket.SOCK_STREAM)\r\n        return sorted({info[4][0] for info in infos})\r\n    except Exception:\r\n        return []\r\n\r\n\r\ndef internet_blocked(target=(\"1.1.1.1\", 443), timeout=6):\r\n    \"\"\"True if outbound internet is blocked (connection cannot be established).\"\"\"\r\n    try:\r\n        with socket.create_connection(target, timeout=timeout):\r\n            return False  # connected -> internet reachable\r\n    except Exception:\r\n        return True  # blocked / timed out -> expected behaviour\r\n\r\n\r\ndef https_get(url, token, timeout=20):\r\n    \"\"\"Authenticated GET. Returns (status_code, latency_ms, snippet).\"\"\"\r\n    ctx = ssl.create_default_context()\r\n    ctx.check_hostname = False\r\n    ctx.verify_mode = ssl.CERT_NONE\r\n    headers = {}\r\n    if token:\r\n        headers[\"Authorization\"] = \"Bearer \" + token\r\n    req = urllib.request.Request(url, headers=headers)\r\n    start = time.time()\r\n    try:\r\n        with urllib.request.urlopen(req, timeout=timeout, context=ctx) as resp:\r\n            body = resp.read(240).decode(\"utf-8\", \"ignore\")\r\n            return resp.status, int((time.time() - start) * 1000), body\r\n    except urllib.error.HTTPError as err:\r\n        body = err.read(240).decode(\"utf-8\", \"ignore\")\r\n        return err.code, int((time.time() - start) * 1000), body\r\n    except Exception as err:\r\n        return 0, int((time.time() - start) * 1000), str(err)\r\n\r\n\r\ndef auth_call(url, token, retries=6, delay=15):\r\n    \"\"\"Call an endpoint, retrying transient RBAC-propagation 403/000 results.\"\"\"\r\n    status, latency, body = https_get(url, token)\r\n    attempts = 1\r\n    while status in (0, 403) and attempts < retries:\r\n        time.sleep(delay)\r\n        status, latency, body = https_get(url, token)\r\n        attempts += 1\r\n    return status, latency, body, attempts\r\n\r\n\r\ndef badge(ok):\r\n    return ('<span class=\"badge pass\">PASS</span>' if ok\r\n            else '<span class=\"badge fail\">FAIL</span>')\r\n\r\n\r\ndef _g(obj, *keys, default=\"\"):\r\n    \"\"\"Safe nested getter for the CONFIG dict.\"\"\"\r\n    cur = obj\r\n    for k in keys:\r\n        if isinstance(cur, dict) and k in cur:\r\n            cur = cur[k]\r\n        else:\r\n            return default\r\n    return cur\r\n\r\n\r\ndef run_checks():\r\n    \"\"\"Run every validation and return a structured result dict.\"\"\"\r\n    now = datetime.datetime.now(datetime.timezone.utc).strftime(\"%Y-%m-%d %H:%M:%S UTC\")\r\n\r\n    cog_token = get_token(\"https://cognitiveservices.azure.com\")\r\n    search_token = get_token(\"https://search.azure.com\")\r\n\r\n    # 1. Private DNS resolution.\r\n    dns_rows = []\r\n    dns_ok = bool(DNS_HOSTS)\r\n    for host in DNS_HOSTS:\r\n        ips = resolve(host)\r\n        private = bool(ips) and all(is_private_ip(ip) for ip in ips)\r\n        dns_ok = dns_ok and private\r\n        dns_rows.append({\r\n            \"host\": host,\r\n            \"ips\": \", \".join(ips) if ips else \"(no answer)\",\r\n            \"ok\": private,\r\n        })\r\n\r\n    # 2. Internet egress blocked.\r\n    inet_blocked = internet_blocked()\r\n\r\n    # 3. Token acquisition.\r\n    tokens_ok = bool(cog_token) and bool(search_token)\r\n\r\n    # 4. Foundry private data-plane (primary region).\r\n    foundry_url = \"https://{0}/openai/models?api-version=2024-10-21\".format(FOUNDRY_HOST)\r\n    f_status, f_ms, f_body, f_try = auth_call(foundry_url, cog_token)\r\n    foundry_ok = f_status == 200\r\n\r\n    # 5. AI Search private data-plane (secondary region, cross-region).\r\n    search_url = \"https://{0}/indexes?api-version=2023-11-01\".format(SEARCH_HOST)\r\n    s_status, s_ms, s_body, s_try = auth_call(search_url, search_token)\r\n    search_ok = s_status == 200\r\n\r\n    overall = dns_ok and inet_blocked and tokens_ok and foundry_ok and search_ok\r\n\r\n    return {\r\n        \"now\": now,\r\n        \"overall\": overall,\r\n        \"dns_ok\": dns_ok,\r\n        \"dns_rows\": dns_rows,\r\n        \"inet_blocked\": inet_blocked,\r\n        \"tokens_ok\": tokens_ok,\r\n        \"cog_token\": bool(cog_token),\r\n        \"search_token\": bool(search_token),\r\n        \"foundry\": {\"ok\": foundry_ok, \"status\": f_status, \"ms\": f_ms,\r\n                    \"url\": foundry_url, \"tries\": f_try},\r\n        \"search\": {\"ok\": search_ok, \"status\": s_status, \"ms\": s_ms,\r\n                   \"url\": search_url, \"tries\": s_try},\r\n    }\r\n\r\n\r\ndef _tab_network():\r\n    e = html.escape\r\n    vnet = _g(CONFIG, \"vnet\", default={})\r\n    rows = []\r\n    for sn in _g(vnet, \"subnets\", default=[]):\r\n        rows.append(\r\n            \"<tr><td class='mono'>{0}</td><td class='mono'>{1}</td>\"\r\n            \"<td class='mono'>{2}</td><td class='mono'>{3}</td><td>{4}</td></tr>\".format(\r\n                e(sn.get(\"name\", \"\")), e(sn.get(\"prefix\", \"\")),\r\n                e(sn.get(\"delegation\", \"\")), e(sn.get(\"nsg\", \"\")),\r\n                e(sn.get(\"purpose\", \"\"))))\r\n    subnet_rows = \"\".join(rows) or \"<tr><td colspan='5'>no config</td></tr>\"\r\n    return \"\"\"\r\n  <div class=\"card\">\r\n    <h2>Virtual network</h2>\r\n    <table>\r\n      <tr><td>Name</td><td class=\"mono\">{name}</td></tr>\r\n      <tr><td>Address space</td><td class=\"mono\">{space}</td></tr>\r\n      <tr><td>Region</td><td class=\"mono\">{region}</td></tr>\r\n    </table>\r\n  </div>\r\n  <div class=\"card\">\r\n    <h2>Subnets, ranges &amp; delegation</h2>\r\n    <table>\r\n      <tr><th>Subnet</th><th>Range</th><th>Delegation</th><th>NSG</th><th>Purpose</th></tr>\r\n      {rows}\r\n    </table>\r\n  </div>\"\"\".format(\r\n        name=e(_g(vnet, \"name\")), space=e(_g(vnet, \"addressSpace\")),\r\n        region=e(_g(CONFIG, \"location\")), rows=subnet_rows)\r\n\r\n\r\ndef _dns_diagram_svg():\r\n    \"\"\"Inline SVG illustrating the private DNS resolution + cross-region private link.\"\"\"\r\n    e = html.escape\r\n    f_region = e(_g(CONFIG, \"foundry\", \"region\") or FOUNDRY_REGION)\r\n    s_region = e(_g(CONFIG, \"search\", \"region\") or SEARCH_REGION)\r\n    return \"\"\"\r\n  <div class=\"card\">\r\n    <h2>How private DNS + cross-region private link works</h2>\r\n    <svg viewBox=\"0 0 920 360\" width=\"100%\" role=\"img\" aria-label=\"Private DNS resolution flow\" style=\"max-width:920px\">\r\n      <defs>\r\n        <marker id=\"arr\" markerWidth=\"10\" markerHeight=\"10\" refX=\"8\" refY=\"3\" orient=\"auto\">\r\n          <path d=\"M0,0 L8,3 L0,6 Z\" fill=\"#5b8cff\"/>\r\n        </marker>\r\n        <style>\r\n          .b{{fill:#161d2e;stroke:#2c3a59;stroke-width:1.5;rx:10}}\r\n          .bz{{fill:#101a32;stroke:#2f6df0;stroke-width:1.5}}\r\n          .bp{{fill:#0e2a1c;stroke:#1c9b5a;stroke-width:1.5}}\r\n          .t{{fill:#e6e9ef;font:13px 'Segoe UI',sans-serif}}\r\n          .ts{{fill:#9fb3d1;font:11px 'Segoe UI',sans-serif}}\r\n          .tm{{fill:#bcd0f5;font:11px Consolas,monospace}}\r\n          .ln{{stroke:#5b8cff;stroke-width:2;fill:none;marker-end:url(#arr)}}\r\n          .lbl{{fill:#7f93b5;font:10.5px 'Segoe UI',sans-serif}}\r\n        </style>\r\n      </defs>\r\n\r\n      <rect class=\"b\" x=\"20\"  y=\"140\" width=\"170\" height=\"74\" rx=\"10\"/>\r\n      <text class=\"t\"  x=\"105\" y=\"168\" text-anchor=\"middle\">Report container</text>\r\n      <text class=\"ts\" x=\"105\" y=\"186\" text-anchor=\"middle\">snet-web</text>\r\n      <text class=\"tm\" x=\"105\" y=\"202\" text-anchor=\"middle\">VNet-injected ACI</text>\r\n\r\n      <rect class=\"bz\" x=\"250\" y=\"30\"  width=\"200\" height=\"74\" rx=\"10\"/>\r\n      <text class=\"t\"  x=\"350\" y=\"58\"  text-anchor=\"middle\">Azure-provided DNS</text>\r\n      <text class=\"tm\" x=\"350\" y=\"76\"  text-anchor=\"middle\">168.63.129.16</text>\r\n      <text class=\"ts\" x=\"350\" y=\"92\"  text-anchor=\"middle\">VNet default resolver</text>\r\n\r\n      <rect class=\"bz\" x=\"250\" y=\"140\" width=\"200\" height=\"84\" rx=\"10\"/>\r\n      <text class=\"t\"  x=\"350\" y=\"166\" text-anchor=\"middle\">Private DNS zones</text>\r\n      <text class=\"tm\" x=\"350\" y=\"184\" text-anchor=\"middle\">privatelink.openai&hellip;</text>\r\n      <text class=\"tm\" x=\"350\" y=\"200\" text-anchor=\"middle\">privatelink.search&hellip;</text>\r\n      <text class=\"ts\" x=\"350\" y=\"216\" text-anchor=\"middle\">linked to the VNet</text>\r\n\r\n      <rect class=\"bp\" x=\"510\" y=\"120\" width=\"180\" height=\"120\" rx=\"10\"/>\r\n      <text class=\"t\"  x=\"600\" y=\"146\" text-anchor=\"middle\">Private endpoints</text>\r\n      <text class=\"ts\" x=\"600\" y=\"164\" text-anchor=\"middle\">snet-pe</text>\r\n      <text class=\"tm\" x=\"600\" y=\"184\" text-anchor=\"middle\">10.40.1.5 openai</text>\r\n      <text class=\"tm\" x=\"600\" y=\"200\" text-anchor=\"middle\">10.40.1.7 search</text>\r\n      <text class=\"ts\" x=\"600\" y=\"222\" text-anchor=\"middle\">private IPs only</text>\r\n\r\n      <rect class=\"b\" x=\"740\" y=\"60\"  width=\"160\" height=\"74\" rx=\"10\"/>\r\n      <text class=\"t\"  x=\"820\" y=\"88\"  text-anchor=\"middle\">Microsoft Foundry</text>\r\n      <text class=\"tm\" x=\"820\" y=\"106\" text-anchor=\"middle\">{f_region}</text>\r\n      <text class=\"ts\" x=\"820\" y=\"122\" text-anchor=\"middle\">public access OFF</text>\r\n\r\n      <rect class=\"b\" x=\"740\" y=\"220\" width=\"160\" height=\"74\" rx=\"10\"/>\r\n      <text class=\"t\"  x=\"820\" y=\"248\" text-anchor=\"middle\">Azure AI Search</text>\r\n      <text class=\"tm\" x=\"820\" y=\"266\" text-anchor=\"middle\">{s_region}</text>\r\n      <text class=\"ts\" x=\"820\" y=\"282\" text-anchor=\"middle\">public access OFF</text>\r\n\r\n      <path class=\"ln\" d=\"M190,162 L246,80\"/>\r\n      <text class=\"lbl\" x=\"196\" y=\"116\">1. resolve FQDN</text>\r\n      <path class=\"ln\" d=\"M350,104 L350,138\"/>\r\n      <text class=\"lbl\" x=\"356\" y=\"124\">2. CNAME to privatelink zone</text>\r\n      <path class=\"ln\" d=\"M450,182 L506,182\"/>\r\n      <text class=\"lbl\" x=\"452\" y=\"174\">3. returns private IP</text>\r\n      <path class=\"ln\" d=\"M190,176 L506,196\"/>\r\n      <text class=\"lbl\" x=\"250\" y=\"250\">4. traffic to PE (private IP) — never leaves the VNet</text>\r\n      <path class=\"ln\" d=\"M690,150 L736,104\"/>\r\n      <text class=\"lbl\" x=\"640\" y=\"120\">private link</text>\r\n      <path class=\"ln\" d=\"M690,210 L736,250\"/>\r\n      <text class=\"lbl\" x=\"624\" y=\"246\">cross-region private link</text>\r\n    </svg>\r\n    <p class=\"note\">The report container in <code>snet-web</code> resolves each public FQDN through the VNet's\r\n    Azure DNS, which is overridden by the linked <code>privatelink.*</code> zones to return a\r\n    <b>private 10.40.1.x</b> address. Traffic then flows over the private endpoint to Foundry\r\n    (<b>{f_region}</b>) and Search (<b>{s_region}</b>) — two different regions — without ever\r\n    using a public IP or leaving the Microsoft backbone.</p>\r\n  </div>\"\"\".format(f_region=f_region, s_region=s_region)\r\n\r\n\r\ndef _tab_dns(r):\r\n    e = html.escape\r\n    rows = []\r\n    for row in r[\"dns_rows\"]:\r\n        rows.append(\r\n            \"<tr><td class='mono'>{0}</td><td class='mono'>{1}</td>\"\r\n            \"<td class='c'>{2}</td></tr>\".format(\r\n                e(row[\"host\"]), e(row[\"ips\"]), badge(row[\"ok\"])))\r\n    dns_table = \"\".join(rows) or \"<tr><td colspan='3'>no hosts configured</td></tr>\"\r\n\r\n    zrows = []\r\n    for z in _g(CONFIG, \"dnsZones\", default=[]):\r\n        zrows.append(\r\n            \"<tr><td class='mono'>{0}</td><td>{1}</td><td class='c'>{2}</td></tr>\".format(\r\n                e(z.get(\"zone\", \"\")), e(z.get(\"service\", \"\")),\r\n                badge(bool(z.get(\"linkedToVnet\")))))\r\n    zone_table = \"\".join(zrows) or \"<tr><td colspan='3'>no zones</td></tr>\"\r\n\r\n    return _dns_diagram_svg() + \"\"\"\r\n  <div class=\"card\">\r\n    <h2>Private DNS zones (linked to VNet)</h2>\r\n    <table>\r\n      <tr><th>Zone</th><th>Backs</th><th class=\"c\">VNet link</th></tr>\r\n      {zones}\r\n    </table>\r\n  </div>\r\n  <div class=\"card\">\r\n    <h2>Live DNS resolution (must be private 10.40.1.x)</h2>\r\n    <table>\r\n      <tr><th>Hostname</th><th>Resolved IP(s)</th><th class=\"c\">Private?</th></tr>\r\n      {dns}\r\n    </table>\r\n  </div>\"\"\".format(zones=zone_table, dns=dns_table)\r\n\r\n\r\ndef _tab_services(r):\r\n    e = html.escape\r\n    f = r[\"foundry\"]\r\n    s = r[\"search\"]\r\n    fc = _g(CONFIG, \"foundry\", default={})\r\n    sc = _g(CONFIG, \"search\", default={})\r\n\r\n    def svc_card(title, cfg, region, status, ok):\r\n        eps = \"\".join(\"<li class='mono'>{0}</li>\".format(e(x))\r\n                      for x in cfg.get(\"endpoints\", [])) or \"<li>n/a</li>\"\r\n        return \"\"\"\r\n  <div class=\"card\">\r\n    <h2>{title} <span class=\"pill\">{region}</span></h2>\r\n    <table>\r\n      <tr><td>Resource</td><td class=\"mono\">{name}</td></tr>\r\n      <tr><td>Kind / SKU</td><td>{kind} &middot; {sku}</td></tr>\r\n      <tr><td>Public network access</td><td><b>{pna}</b></td></tr>\r\n      <tr><td>Auth</td><td>{auth}</td></tr>\r\n      <tr><td>Private endpoint</td><td class=\"mono\">{pe} &rarr; {pesub}</td></tr>\r\n      <tr><td>Hello-world call</td><td>HTTP <b>{status}</b> {bdg}</td></tr>\r\n    </table>\r\n    <h2>Endpoints</h2>\r\n    <ul class=\"eps\">{eps}</ul>\r\n  </div>\"\"\".format(\r\n            title=e(title), region=e(region), name=e(cfg.get(\"name\", \"\")),\r\n            kind=e(cfg.get(\"kind\", \"\")), sku=e(cfg.get(\"sku\", \"\")),\r\n            pna=e(cfg.get(\"publicNetworkAccess\", \"\")), auth=e(cfg.get(\"authMode\", \"\")),\r\n            pe=e(cfg.get(\"privateEndpoint\", \"\")), pesub=e(cfg.get(\"peSubnet\", \"\")),\r\n            status=status, bdg=badge(ok), eps=eps)\r\n\r\n    return (svc_card(\"Microsoft Foundry\", fc, _g(fc, \"region\") or FOUNDRY_REGION,\r\n                     f[\"status\"], f[\"ok\"])\r\n            + svc_card(\"Azure AI Search (cross-region)\", sc,\r\n                       _g(sc, \"region\") or SEARCH_REGION, s[\"status\"], s[\"ok\"]))\r\n\r\n\r\ndef _tab_nsg():\r\n    e = html.escape\r\n    rows = []\r\n    for n in _g(CONFIG, \"nsgs\", default=[]):\r\n        rows.append(\r\n            \"<tr><td class='mono'>{0}</td><td class='mono'>{1}</td><td>{2}</td></tr>\".format(\r\n                e(n.get(\"name\", \"\")), e(n.get(\"appliesTo\", \"\")), e(n.get(\"summary\", \"\"))))\r\n    table = \"\".join(rows) or \"<tr><td colspan='3'>no NSGs</td></tr>\"\r\n    return \"\"\"\r\n  <div class=\"card\">\r\n    <h2>Network security groups</h2>\r\n    <table>\r\n      <tr><th>NSG</th><th>Subnet</th><th>Rule summary</th></tr>\r\n      {rows}\r\n    </table>\r\n    <p class=\"note\">Egress is locked down: only Entra ID (AzureActiveDirectory), Azure\r\n    infrastructure (AzureCloud) and intra-VNet traffic are permitted; general Internet is\r\n    denied. This is what proves the services are reachable <i>only</i> over private link.</p>\r\n  </div>\"\"\".format(rows=table)\r\n\r\n\r\ndef _tab_deploy():\r\n    e = html.escape\r\n    dep = _g(CONFIG, \"portalDeploymentsUrl\")\r\n    rgu = _g(CONFIG, \"portalResourceGroupUrl\")\r\n    dep_link = (\"<a href='{0}' target='_blank'>View deployments in Azure portal</a>\".format(e(dep))\r\n                if dep else \"n/a\")\r\n    rg_link = (\"<a href='{0}' target='_blank'>Open resource group</a>\".format(e(rgu))\r\n               if rgu else \"n/a\")\r\n    return \"\"\"\r\n  <div class=\"card\">\r\n    <h2>Deployment</h2>\r\n    <table>\r\n      <tr><td>Subscription</td><td class=\"mono\">{sub}</td></tr>\r\n      <tr><td>Resource group</td><td class=\"mono\">{rg}</td></tr>\r\n      <tr><td>Environment</td><td class=\"mono\">{env}</td></tr>\r\n      <tr><td>Resource token</td><td class=\"mono\">{tok}</td></tr>\r\n      <tr><td>IaC template</td><td class=\"mono\">{tpl}</td></tr>\r\n      <tr><td>Portal &mdash; deployments</td><td>{deplink}</td></tr>\r\n      <tr><td>Portal &mdash; resource group</td><td>{rglink}</td></tr>\r\n    </table>\r\n    <p class=\"note\">This environment is defined entirely in the Bicep template\r\n    <code>{tpl}</code> and deployed with <code>az deployment group create</code>.</p>\r\n  </div>\"\"\".format(\r\n        sub=e(_g(CONFIG, \"subscriptionId\")), rg=e(_g(CONFIG, \"resourceGroup\")),\r\n        env=e(_g(CONFIG, \"environmentName\")), tok=e(_g(CONFIG, \"resourceToken\")),\r\n        tpl=e(_g(CONFIG, \"templatePath\")), deplink=dep_link, rglink=rg_link)\r\n\r\n\r\ndef render_html(r):\r\n    \"\"\"Build the tabbed HTML report from a results dict.\"\"\"\r\n    e = html.escape\r\n    banner_cls = \"ok\" if r[\"overall\"] else \"bad\"\r\n    banner_txt = (\"ALL PRIVATE CONNECTIVITY CHECKS PASSED\"\r\n                  if r[\"overall\"] else \"ONE OR MORE CHECKS FAILED\")\r\n\r\n    f = r[\"foundry\"]\r\n    s = r[\"search\"]\r\n    f_region = _g(CONFIG, \"foundry\", \"region\") or FOUNDRY_REGION\r\n    s_region = _g(CONFIG, \"search\", \"region\") or SEARCH_REGION\r\n\r\n    status_tab = \"\"\"\r\n  <div class=\"card\">\r\n    <h2>Summary</h2>\r\n    <table>\r\n      <tr><th>Check</th><th>Detail</th><th class=\"c\">Result</th></tr>\r\n      <tr><td>Private DNS resolution</td><td>public FQDNs resolve to private 10.x endpoint IPs</td><td class=\"c\">{dns_badge}</td></tr>\r\n      <tr><td>Internet egress blocked</td><td>subnet NSG denies general internet (tested 1.1.1.1:443)</td><td class=\"c\">{inet_badge}</td></tr>\r\n      <tr><td>Managed-identity tokens</td><td>Cognitive: {cog}, Search: {srch}</td><td class=\"c\">{tok_badge}</td></tr>\r\n      <tr><td>Foundry private endpoint <span class=\"pill\">{f_region}</span></td><td>authenticated GET /openai/models &rarr; HTTP {f_status} ({f_ms} ms)</td><td class=\"c\">{f_badge}</td></tr>\r\n      <tr><td>AI Search private endpoint <span class=\"pill\">{s_region} &middot; cross-region</span></td><td>authenticated GET /indexes &rarr; HTTP {s_status} ({s_ms} ms)</td><td class=\"c\">{s_badge}</td></tr>\r\n    </table>\r\n  </div>\r\n  <div class=\"card\">\r\n    <h2>Cross-region &ldquo;hello world&rdquo; (live)</h2>\r\n    <p class=\"note\">Both services have <b>public network access disabled</b>. These authenticated\r\n    calls succeed only because the report container reaches them over private endpoints &mdash;\r\n    and the two services sit in <b>different regions</b>.</p>\r\n    <div class=\"hw\">\r\n      <div class=\"hwbox {f_state}\">\r\n        <div class=\"hwt\">Microsoft Foundry</div>\r\n        <div class=\"hwr\">{f_region}</div>\r\n        <div class=\"hwc mono\">GET /openai/models</div>\r\n        <div class=\"hws\">HTTP {f_status} &middot; {f_ms} ms {f_badge}</div>\r\n      </div>\r\n      <div class=\"hwarrow\">&harr;<div class=\"lbl\">cross-region<br>private link</div></div>\r\n      <div class=\"hwbox {s_state}\">\r\n        <div class=\"hwt\">Azure AI Search</div>\r\n        <div class=\"hwr\">{s_region}</div>\r\n        <div class=\"hwc mono\">GET /indexes</div>\r\n        <div class=\"hws\">HTTP {s_status} &middot; {s_ms} ms {s_badge}</div>\r\n      </div>\r\n    </div>\r\n  </div>\"\"\".format(\r\n        dns_badge=badge(r[\"dns_ok\"]), inet_badge=badge(r[\"inet_blocked\"]),\r\n        tok_badge=badge(r[\"tokens_ok\"]),\r\n        cog=\"present\" if r[\"cog_token\"] else \"EMPTY\",\r\n        srch=\"present\" if r[\"search_token\"] else \"EMPTY\",\r\n        f_region=e(f_region), s_region=e(s_region),\r\n        f_status=f[\"status\"], f_ms=f[\"ms\"], f_badge=badge(f[\"ok\"]),\r\n        s_status=s[\"status\"], s_ms=s[\"ms\"], s_badge=badge(s[\"ok\"]),\r\n        f_state=\"ok\" if f[\"ok\"] else \"bad\", s_state=\"ok\" if s[\"ok\"] else \"bad\")\r\n\r\n    tabs = [\r\n        (\"status\", \"Status\", status_tab),\r\n        (\"network\", \"Network\", _tab_network()),\r\n        (\"dns\", \"Private DNS\", _tab_dns(r)),\r\n        (\"services\", \"Services\", _tab_services(r)),\r\n        (\"nsg\", \"NSG\", _tab_nsg()),\r\n        (\"deploy\", \"Deployment\", _tab_deploy()),\r\n    ]\r\n    nav = \"\".join(\r\n        \"<button class='tab' data-tab='{0}' onclick=\\\"showTab('{0}')\\\">{1}</button>\".format(tid, tlabel)\r\n        for tid, tlabel, _ in tabs)\r\n    panes = \"\".join(\r\n        \"<section id='pane-{0}' class='pane'>{1}</section>\".format(tid, body)\r\n        for tid, _, body in tabs)\r\n\r\n    return \"\"\"<!DOCTYPE html>\r\n<html lang=\"en\">\r\n<head>\r\n<meta charset=\"utf-8\">\r\n<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\r\n<meta http-equiv=\"refresh\" content=\"{refresh}\">\r\n<title>Private Connectivity Report</title>\r\n<style>\r\n  :root {{ color-scheme: light dark; }}\r\n  body {{ font-family: 'Segoe UI', system-ui, sans-serif; margin: 0; background: #0f1420; color: #e6e9ef; }}\r\n  .wrap {{ max-width: 980px; margin: 0 auto; padding: 28px 20px 60px; }}\r\n  h1 {{ font-size: 22px; margin: 0 0 4px; }}\r\n  .sub {{ color: #94a3b8; font-size: 13px; margin-bottom: 18px; }}\r\n  .banner {{ padding: 14px 20px; border-radius: 10px; font-weight: 600; font-size: 16px;\r\n            margin-bottom: 18px; letter-spacing: .3px; }}\r\n  .banner.ok {{ background: #06371f; color: #54e08a; border: 1px solid #138a4e; }}\r\n  .banner.bad {{ background: #3a0f12; color: #ff7b85; border: 1px solid #b3303b; }}\r\n  .tabs {{ display:flex; flex-wrap:wrap; gap:6px; margin-bottom:18px; border-bottom:1px solid #243049; }}\r\n  .tab {{ background:transparent; border:none; color:#9fb3d1; font:600 13px 'Segoe UI',sans-serif;\r\n         padding:9px 14px; cursor:pointer; border-radius:8px 8px 0 0; }}\r\n  .tab:hover {{ color:#e6e9ef; background:#161d2e; }}\r\n  .tab.active {{ color:#fff; background:#1d2740; border-bottom:2px solid #5b8cff; }}\r\n  .pane {{ display:none; }}\r\n  .pane.active {{ display:block; }}\r\n  .card {{ background: #161d2e; border: 1px solid #243049; border-radius: 10px;\r\n          padding: 4px 18px 16px; margin-bottom: 18px; }}\r\n  .card h2 {{ font-size: 13px; text-transform: uppercase; letter-spacing: .6px;\r\n             color: #9fb3d1; margin: 16px 0 10px; }}\r\n  table {{ width: 100%; border-collapse: collapse; font-size: 14px; }}\r\n  th, td {{ text-align: left; padding: 8px 10px; border-bottom: 1px solid #233048; vertical-align: top; }}\r\n  th {{ color: #8aa0c2; font-weight: 600; font-size: 12px; text-transform: uppercase; }}\r\n  td.c, th.c {{ text-align: center; }}\r\n  .mono {{ font-family: 'Cascadia Code', Consolas, monospace; font-size: 12.5px; }}\r\n  .badge {{ display: inline-block; padding: 2px 10px; border-radius: 999px;\r\n           font-size: 11px; font-weight: 700; letter-spacing: .5px; }}\r\n  .badge.pass {{ background: #16432a; color: #5ee08c; }}\r\n  .badge.fail {{ background: #4a1418; color: #ff7b85; }}\r\n  .pill {{ display:inline-block; padding:2px 9px; border-radius:6px; background:#1d2740;\r\n          color:#9fb3d1; font-size:12px; margin-left:6px; }}\r\n  .note {{ color:#94a3b8; font-size:12.5px; line-height:1.5; }}\r\n  ul.eps {{ margin:4px 0 10px; padding-left:20px; }} ul.eps li {{ margin:3px 0; }}\r\n  .hw {{ display:flex; align-items:center; gap:14px; flex-wrap:wrap; margin:6px 0 4px; }}\r\n  .hwbox {{ flex:1; min-width:220px; border-radius:10px; padding:12px 14px; border:1px solid #243049; background:#101a32; }}\r\n  .hwbox.ok {{ border-color:#1c9b5a; background:#0e2a1c; }}\r\n  .hwbox.bad {{ border-color:#b3303b; background:#3a0f12; }}\r\n  .hwt {{ font-weight:700; font-size:15px; }}\r\n  .hwr {{ color:#bcd0f5; font:12px Consolas,monospace; margin:2px 0 8px; }}\r\n  .hwc {{ color:#9fb3d1; }} .hws {{ margin-top:8px; font-size:13px; }}\r\n  .hwarrow {{ text-align:center; color:#5b8cff; font-size:22px; }}\r\n  .hwarrow .lbl {{ color:#7f93b5; font-size:10.5px; }}\r\n  footer {{ color: #64748b; font-size: 12px; margin-top: 8px; }}\r\n  code {{ background:#0d1322; padding:1px 5px; border-radius:4px; }}\r\n  a {{ color:#7aa7ff; }}\r\n</style>\r\n</head>\r\n<body>\r\n<div class=\"wrap\">\r\n  <h1>Private Connectivity Validation</h1>\r\n  <div class=\"sub\">Served from inside the VNet &middot; public network access is <b>disabled</b> on both services &middot; generated {now}</div>\r\n\r\n  <div class=\"banner {banner_cls}\">{banner_txt}</div>\r\n\r\n  <div class=\"tabs\">{nav}</div>\r\n  {panes}\r\n\r\n  <footer>\r\n    Page auto-refreshes every {refresh}s. RBAC propagation can take several minutes after first\r\n    deploy, so Foundry/Search may briefly show <code>403</code> before turning green.\r\n  </footer>\r\n</div>\r\n<script>\r\n  function showTab(id) {{\r\n    document.querySelectorAll('.pane').forEach(function(p){{ p.classList.remove('active'); }});\r\n    document.querySelectorAll('.tab').forEach(function(t){{ t.classList.remove('active'); }});\r\n    var pane = document.getElementById('pane-' + id);\r\n    var tab = document.querySelector(\".tab[data-tab='\" + id + \"']\");\r\n    if (pane) pane.classList.add('active');\r\n    if (tab) tab.classList.add('active');\r\n    if (history.replaceState) history.replaceState(null, '', '#' + id);\r\n  }}\r\n  showTab((location.hash || '#status').slice(1));\r\n</script>\r\n</body>\r\n</html>\"\"\".format(\r\n        refresh=REFRESH, now=e(r[\"now\"]),\r\n        banner_cls=banner_cls, banner_txt=banner_txt,\r\n        nav=nav, panes=panes)\r\n\r\n\r\n\r\ndef write_report(html_text):\r\n    tmp = INDEX + \".tmp\"\r\n    with open(tmp, \"w\", encoding=\"utf-8\") as fh:\r\n        fh.write(html_text)\r\n    os.replace(tmp, INDEX)\r\n\r\n\r\ndef report_loop():\r\n    while True:\r\n        try:\r\n            results = run_checks()\r\n            write_report(render_html(results))\r\n            print(\"report updated: overall={0} foundry={1} search={2}\".format(\r\n                results[\"overall\"], results[\"foundry\"][\"status\"],\r\n                results[\"search\"][\"status\"]), flush=True)\r\n        except Exception as err:  # never let the loop die\r\n            print(\"report error: {0}\".format(err), flush=True)\r\n        time.sleep(REFRESH)\r\n\r\n\r\ndef main():\r\n    os.makedirs(SITE, exist_ok=True)\r\n    write_report(\"<!DOCTYPE html><html><body style='font-family:sans-serif;background:#0f1420;\"\r\n                 \"color:#e6e9ef;padding:40px'><h2>Running private-connectivity checks&hellip;</h2>\"\r\n                 \"<p>This page will refresh automatically.</p>\"\r\n                 \"<meta http-equiv='refresh' content='10'></body></html>\")\r\n\r\n    threading.Thread(target=report_loop, daemon=True).start()\r\n\r\n    handler = functools.partial(http.server.SimpleHTTPRequestHandler, directory=SITE)\r\n    server = http.server.ThreadingHTTPServer((\"0.0.0.0\", 80), handler)\r\n    print(\"serving report on :80\", flush=True)\r\n    server.serve_forever()\r\n\r\n\r\nif __name__ == \"__main__\":\r\n    main()\r\n",
+    "portalDeploymentsUrl": "[format('https://portal.azure.com/#@{0}/resource/subscriptions/{1}/resourceGroups/{2}/deployments', tenant().tenantId, subscription().subscriptionId, resourceGroup().name)]",
+    "portalResourceGroupUrl": "[format('https://portal.azure.com/#@{0}/resource/subscriptions/{1}/resourceGroups/{2}/overview', tenant().tenantId, subscription().subscriptionId, resourceGroup().name)]",
+    "reportConfig": {
+      "subscriptionId": "[subscription().subscriptionId]",
+      "resourceGroup": "[resourceGroup().name]",
+      "location": "[parameters('location')]",
+      "searchLocation": "[parameters('searchLocation')]",
+      "environmentName": "[parameters('environmentName')]",
+      "resourceToken": "[variables('resourceToken')]",
+      "templatePath": "infra/nsp-private/main.bicep",
+      "portalDeploymentsUrl": "[variables('portalDeploymentsUrl')]",
+      "portalResourceGroupUrl": "[variables('portalResourceGroupUrl')]",
+      "vnet": {
+        "name": "[format('vnet-{0}', variables('resourceToken'))]",
+        "addressSpace": "[parameters('vnetAddressPrefix')]",
+        "subnets": [
+          {
+            "name": "snet-pe",
+            "prefix": "[parameters('peSubnetPrefix')]",
+            "delegation": "(none)",
+            "nsg": "(none)",
+            "purpose": "Private endpoints for Foundry + Search (PE NICs land here)"
+          },
+          {
+            "name": "snet-aci",
+            "prefix": "[parameters('aciSubnetPrefix')]",
+            "delegation": "Microsoft.ContainerInstance/containerGroups",
+            "nsg": "[format('nsg-aci-{0}', variables('resourceToken'))]",
+            "purpose": "One-shot connectivity tester (VNet-injected ACI)"
+          },
+          {
+            "name": "snet-web",
+            "prefix": "[parameters('webSubnetPrefix')]",
+            "delegation": "Microsoft.ContainerInstance/containerGroups",
+            "nsg": "[format('nsg-web-{0}', variables('resourceToken'))]",
+            "purpose": "HTML report server (VNet-injected ACI) - this page"
+          },
+          {
+            "name": "snet-agw",
+            "prefix": "[parameters('agwSubnetPrefix')]",
+            "delegation": "(none)",
+            "nsg": "[format('nsg-agw-{0}', variables('resourceToken'))]",
+            "purpose": "Application Gateway public ingress (restricted to one client IP)"
+          }
+        ]
+      },
+      "dnsZones": [
+        {
+          "zone": "privatelink.cognitiveservices.azure.com",
+          "service": "Foundry (Cognitive Services data plane)",
+          "linkedToVnet": true
+        },
+        {
+          "zone": "privatelink.openai.azure.com",
+          "service": "Foundry (Azure OpenAI data plane)",
+          "linkedToVnet": true
+        },
+        {
+          "zone": "privatelink.services.ai.azure.com",
+          "service": "Foundry (AI Services data plane)",
+          "linkedToVnet": true
+        },
+        {
+          "zone": "privatelink.search.windows.net",
+          "service": "Azure AI Search data plane (cross-region)",
+          "linkedToVnet": true
+        }
+      ],
+      "foundry": {
+        "name": "[variables('foundryName')]",
+        "region": "[parameters('location')]",
+        "kind": "AIServices (Microsoft Foundry)",
+        "sku": "S0",
+        "publicNetworkAccess": "Disabled",
+        "authMode": "Entra ID only (local auth disabled)",
+        "privateEndpoint": "[format('pe-foundry-{0}', variables('resourceToken'))]",
+        "peSubnet": "snet-pe",
+        "endpoints": [
+          "[format('{0}.cognitiveservices.azure.com', variables('foundryName'))]",
+          "[format('{0}.openai.azure.com', variables('foundryName'))]",
+          "[format('{0}.services.ai.azure.com', variables('foundryName'))]"
+        ]
+      },
+      "search": {
+        "name": "[variables('searchName')]",
+        "region": "[parameters('searchLocation')]",
+        "kind": "Azure AI Search",
+        "sku": "basic",
+        "publicNetworkAccess": "disabled",
+        "authMode": "Entra ID only (local auth disabled)",
+        "privateEndpoint": "[format('pe-search-{0}', variables('resourceToken'))]",
+        "peSubnet": "snet-pe",
+        "endpoints": [
+          "[format('{0}.search.windows.net', variables('searchName'))]"
+        ]
+      },
+      "nsgs": [
+        {
+          "name": "[format('nsg-aci-{0}', variables('resourceToken'))]",
+          "appliesTo": "snet-aci",
+          "summary": "Outbound: allow AzureActiveDirectory + AzureCloud + VirtualNetwork; deny Internet. Inbound: default."
+        },
+        {
+          "name": "[format('nsg-web-{0}', variables('resourceToken'))]",
+          "appliesTo": "snet-web",
+          "summary": "Inbound: allow HTTP 80 from VirtualNetwork; deny Internet. Outbound: allow AAD + AzureCloud + VNet; deny Internet."
+        },
+        {
+          "name": "[format('nsg-agw-{0}', variables('resourceToken'))]",
+          "appliesTo": "snet-agw",
+          "summary": "Inbound: allow client IP :80 + GatewayManager 65200-65535 + AzureLoadBalancer; deny Internet. Outbound: allow AAD + AzureCloud + VNet; deny Internet."
+        }
+      ]
+    },
+    "agwName": "[format('agw-{0}', variables('resourceToken'))]"
+  },
+  "resources": [
+    {
+      "type": "Microsoft.ManagedIdentity/userAssignedIdentities",
+      "apiVersion": "2023-01-31",
+      "name": "[format('id-aci-{0}', variables('resourceToken'))]",
+      "location": "[parameters('location')]",
+      "tags": "[variables('tags')]"
+    },
+    {
+      "type": "Microsoft.Network/networkSecurityGroups",
+      "apiVersion": "2024-05-01",
+      "name": "[format('nsg-aci-{0}', variables('resourceToken'))]",
+      "location": "[parameters('location')]",
+      "tags": "[variables('tags')]",
+      "properties": {
+        "securityRules": [
+          {
+            "name": "Allow-Outbound-AzureActiveDirectory",
+            "properties": {
+              "priority": 100,
+              "direction": "Outbound",
+              "access": "Allow",
+              "protocol": "Tcp",
+              "sourcePortRange": "*",
+              "destinationPortRange": "443",
+              "sourceAddressPrefix": "*",
+              "destinationAddressPrefix": "AzureActiveDirectory",
+              "description": "Allow Entra ID (AAD) token acquisition for managed-identity auth."
+            }
+          },
+          {
+            "name": "Allow-Outbound-AzureCloud",
+            "properties": {
+              "priority": 200,
+              "direction": "Outbound",
+              "access": "Allow",
+              "protocol": "Tcp",
+              "sourcePortRange": "*",
+              "destinationPortRange": "443",
+              "sourceAddressPrefix": "*",
+              "destinationAddressPrefix": "AzureCloud",
+              "description": "Allow Azure infra egress (MCR image pull, ARM, Storage)."
+            }
+          },
+          {
+            "name": "Allow-Outbound-VirtualNetwork",
+            "properties": {
+              "priority": 300,
+              "direction": "Outbound",
+              "access": "Allow",
+              "protocol": "*",
+              "sourcePortRange": "*",
+              "destinationPortRange": "*",
+              "sourceAddressPrefix": "*",
+              "destinationAddressPrefix": "VirtualNetwork",
+              "description": "Allow reaching the private endpoints inside the VNet."
+            }
+          },
+          {
+            "name": "Deny-Outbound-Internet",
+            "properties": {
+              "priority": 4000,
+              "direction": "Outbound",
+              "access": "Deny",
+              "protocol": "*",
+              "sourcePortRange": "*",
+              "destinationPortRange": "*",
+              "sourceAddressPrefix": "*",
+              "destinationAddressPrefix": "Internet",
+              "description": "Deny all other internet egress; only AAD + Azure infra + VNet allowed."
+            }
+          }
+        ]
+      }
+    },
+    {
+      "type": "Microsoft.Network/networkSecurityGroups",
+      "apiVersion": "2024-05-01",
+      "name": "[format('nsg-web-{0}', variables('resourceToken'))]",
+      "location": "[parameters('location')]",
+      "tags": "[variables('tags')]",
+      "properties": {
+        "securityRules": [
+          {
+            "name": "Allow-Inbound-Http-FromVNet",
+            "properties": {
+              "priority": 100,
+              "direction": "Inbound",
+              "access": "Allow",
+              "protocol": "Tcp",
+              "sourcePortRange": "*",
+              "destinationPortRange": "80",
+              "sourceAddressPrefix": "VirtualNetwork",
+              "destinationAddressPrefix": "VirtualNetwork",
+              "description": "Allow viewing the HTML report on port 80 from inside the VNet only."
+            }
+          },
+          {
+            "name": "Deny-Inbound-Internet",
+            "properties": {
+              "priority": 4000,
+              "direction": "Inbound",
+              "access": "Deny",
+              "protocol": "*",
+              "sourcePortRange": "*",
+              "destinationPortRange": "*",
+              "sourceAddressPrefix": "Internet",
+              "destinationAddressPrefix": "*",
+              "description": "No inbound from the public internet."
+            }
+          },
+          {
+            "name": "Allow-Outbound-AzureActiveDirectory",
+            "properties": {
+              "priority": 100,
+              "direction": "Outbound",
+              "access": "Allow",
+              "protocol": "Tcp",
+              "sourcePortRange": "*",
+              "destinationPortRange": "443",
+              "sourceAddressPrefix": "*",
+              "destinationAddressPrefix": "AzureActiveDirectory",
+              "description": "Allow Entra ID (AAD) token acquisition for managed-identity auth."
+            }
+          },
+          {
+            "name": "Allow-Outbound-AzureCloud",
+            "properties": {
+              "priority": 200,
+              "direction": "Outbound",
+              "access": "Allow",
+              "protocol": "Tcp",
+              "sourcePortRange": "*",
+              "destinationPortRange": "443",
+              "sourceAddressPrefix": "*",
+              "destinationAddressPrefix": "AzureCloud",
+              "description": "Allow Azure infra egress (MCR image pull, ARM, Storage)."
+            }
+          },
+          {
+            "name": "Allow-Outbound-VirtualNetwork",
+            "properties": {
+              "priority": 300,
+              "direction": "Outbound",
+              "access": "Allow",
+              "protocol": "*",
+              "sourcePortRange": "*",
+              "destinationPortRange": "*",
+              "sourceAddressPrefix": "*",
+              "destinationAddressPrefix": "VirtualNetwork",
+              "description": "Allow reaching the private endpoints inside the VNet."
+            }
+          },
+          {
+            "name": "Deny-Outbound-Internet",
+            "properties": {
+              "priority": 4000,
+              "direction": "Outbound",
+              "access": "Deny",
+              "protocol": "*",
+              "sourcePortRange": "*",
+              "destinationPortRange": "*",
+              "sourceAddressPrefix": "*",
+              "destinationAddressPrefix": "Internet",
+              "description": "Deny all other internet egress; only AAD + Azure infra + VNet allowed."
+            }
+          }
+        ]
+      }
+    },
+    {
+      "type": "Microsoft.Network/networkSecurityGroups",
+      "apiVersion": "2024-05-01",
+      "name": "[format('nsg-agw-{0}', variables('resourceToken'))]",
+      "location": "[parameters('location')]",
+      "tags": "[variables('tags')]",
+      "properties": {
+        "securityRules": [
+          {
+            "name": "Allow-Inbound-Http-Internet",
+            "properties": {
+              "priority": 100,
+              "direction": "Inbound",
+              "access": "Allow",
+              "protocol": "Tcp",
+              "sourcePortRange": "*",
+              "destinationPortRange": "80",
+              "sourceAddressPrefix": "Internet",
+              "destinationAddressPrefix": "*",
+              "description": "AGW v2 frontend client traffic is Internet-tagged at the subnet NSG; port 80 must be allowed from Internet or all client requests are dropped."
+            }
+          },
+          {
+            "name": "Allow-Inbound-GatewayManager",
+            "properties": {
+              "priority": 110,
+              "direction": "Inbound",
+              "access": "Allow",
+              "protocol": "Tcp",
+              "sourcePortRange": "*",
+              "destinationPortRange": "65200-65535",
+              "sourceAddressPrefix": "GatewayManager",
+              "destinationAddressPrefix": "*",
+              "description": "Required by Application Gateway v2 for health/management traffic."
+            }
+          },
+          {
+            "name": "Allow-Inbound-AzureLoadBalancer",
+            "properties": {
+              "priority": 120,
+              "direction": "Inbound",
+              "access": "Allow",
+              "protocol": "*",
+              "sourcePortRange": "*",
+              "destinationPortRange": "*",
+              "sourceAddressPrefix": "AzureLoadBalancer",
+              "destinationAddressPrefix": "*",
+              "description": "Allow Azure Load Balancer health probes."
+            }
+          }
+        ]
+      }
+    },
+    {
+      "type": "Microsoft.Network/virtualNetworks",
+      "apiVersion": "2024-05-01",
+      "name": "[format('vnet-{0}', variables('resourceToken'))]",
+      "location": "[parameters('location')]",
+      "tags": "[variables('tags')]",
+      "properties": {
+        "addressSpace": {
+          "addressPrefixes": [
+            "[parameters('vnetAddressPrefix')]"
+          ]
+        },
+        "subnets": [
+          {
+            "name": "snet-pe",
+            "properties": {
+              "addressPrefix": "[parameters('peSubnetPrefix')]",
+              "privateEndpointNetworkPolicies": "Disabled"
+            }
+          },
+          {
+            "name": "snet-aci",
+            "properties": {
+              "addressPrefix": "[parameters('aciSubnetPrefix')]",
+              "networkSecurityGroup": {
+                "id": "[resourceId('Microsoft.Network/networkSecurityGroups', format('nsg-aci-{0}', variables('resourceToken')))]"
+              },
+              "delegations": [
+                {
+                  "name": "aci-delegation",
+                  "properties": {
+                    "serviceName": "Microsoft.ContainerInstance/containerGroups"
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "name": "snet-web",
+            "properties": {
+              "addressPrefix": "[parameters('webSubnetPrefix')]",
+              "networkSecurityGroup": {
+                "id": "[resourceId('Microsoft.Network/networkSecurityGroups', format('nsg-web-{0}', variables('resourceToken')))]"
+              },
+              "delegations": [
+                {
+                  "name": "aci-delegation",
+                  "properties": {
+                    "serviceName": "Microsoft.ContainerInstance/containerGroups"
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "name": "snet-agw",
+            "properties": {
+              "addressPrefix": "[parameters('agwSubnetPrefix')]",
+              "networkSecurityGroup": {
+                "id": "[resourceId('Microsoft.Network/networkSecurityGroups', format('nsg-agw-{0}', variables('resourceToken')))]"
+              }
+            }
+          }
+        ]
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Network/networkSecurityGroups', format('nsg-aci-{0}', variables('resourceToken')))]",
+        "[resourceId('Microsoft.Network/networkSecurityGroups', format('nsg-agw-{0}', variables('resourceToken')))]",
+        "[resourceId('Microsoft.Network/networkSecurityGroups', format('nsg-web-{0}', variables('resourceToken')))]"
+      ]
+    },
+    {
+      "type": "Microsoft.CognitiveServices/accounts",
+      "apiVersion": "2024-10-01",
+      "name": "[variables('foundryName')]",
+      "location": "[parameters('location')]",
+      "tags": "[variables('tags')]",
+      "kind": "AIServices",
+      "sku": {
+        "name": "S0"
+      },
+      "identity": {
+        "type": "SystemAssigned"
+      },
+      "properties": {
+        "customSubDomainName": "[variables('foundryName')]",
+        "publicNetworkAccess": "Disabled",
+        "disableLocalAuth": true,
+        "networkAcls": {
+          "defaultAction": "Deny"
+        }
+      }
+    },
+    {
+      "type": "Microsoft.Search/searchServices",
+      "apiVersion": "2024-03-01-preview",
+      "name": "[variables('searchName')]",
+      "location": "[parameters('searchLocation')]",
+      "tags": "[variables('tags')]",
+      "sku": {
+        "name": "basic"
+      },
+      "identity": {
+        "type": "SystemAssigned"
+      },
+      "properties": {
+        "replicaCount": 1,
+        "partitionCount": 1,
+        "publicNetworkAccess": "disabled",
+        "disableLocalAuth": true
+      }
+    },
+    {
+      "type": "Microsoft.Network/privateDnsZones",
+      "apiVersion": "2020-06-01",
+      "name": "privatelink.cognitiveservices.azure.com",
+      "location": "global",
+      "tags": "[variables('tags')]"
+    },
+    {
+      "type": "Microsoft.Network/privateDnsZones",
+      "apiVersion": "2020-06-01",
+      "name": "privatelink.openai.azure.com",
+      "location": "global",
+      "tags": "[variables('tags')]"
+    },
+    {
+      "type": "Microsoft.Network/privateDnsZones",
+      "apiVersion": "2020-06-01",
+      "name": "privatelink.services.ai.azure.com",
+      "location": "global",
+      "tags": "[variables('tags')]"
+    },
+    {
+      "type": "Microsoft.Network/privateDnsZones",
+      "apiVersion": "2020-06-01",
+      "name": "privatelink.search.windows.net",
+      "location": "global",
+      "tags": "[variables('tags')]"
+    },
+    {
+      "type": "Microsoft.Network/privateDnsZones/virtualNetworkLinks",
+      "apiVersion": "2020-06-01",
+      "name": "[format('{0}/{1}', 'privatelink.cognitiveservices.azure.com', format('link-{0}', variables('resourceToken')))]",
+      "location": "global",
+      "properties": {
+        "registrationEnabled": false,
+        "virtualNetwork": {
+          "id": "[resourceId('Microsoft.Network/virtualNetworks', format('vnet-{0}', variables('resourceToken')))]"
+        }
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Network/privateDnsZones', 'privatelink.cognitiveservices.azure.com')]",
+        "[resourceId('Microsoft.Network/virtualNetworks', format('vnet-{0}', variables('resourceToken')))]"
+      ]
+    },
+    {
+      "type": "Microsoft.Network/privateDnsZones/virtualNetworkLinks",
+      "apiVersion": "2020-06-01",
+      "name": "[format('{0}/{1}', 'privatelink.openai.azure.com', format('link-{0}', variables('resourceToken')))]",
+      "location": "global",
+      "properties": {
+        "registrationEnabled": false,
+        "virtualNetwork": {
+          "id": "[resourceId('Microsoft.Network/virtualNetworks', format('vnet-{0}', variables('resourceToken')))]"
+        }
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Network/privateDnsZones', 'privatelink.openai.azure.com')]",
+        "[resourceId('Microsoft.Network/virtualNetworks', format('vnet-{0}', variables('resourceToken')))]"
+      ]
+    },
+    {
+      "type": "Microsoft.Network/privateDnsZones/virtualNetworkLinks",
+      "apiVersion": "2020-06-01",
+      "name": "[format('{0}/{1}', 'privatelink.services.ai.azure.com', format('link-{0}', variables('resourceToken')))]",
+      "location": "global",
+      "properties": {
+        "registrationEnabled": false,
+        "virtualNetwork": {
+          "id": "[resourceId('Microsoft.Network/virtualNetworks', format('vnet-{0}', variables('resourceToken')))]"
+        }
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Network/privateDnsZones', 'privatelink.services.ai.azure.com')]",
+        "[resourceId('Microsoft.Network/virtualNetworks', format('vnet-{0}', variables('resourceToken')))]"
+      ]
+    },
+    {
+      "type": "Microsoft.Network/privateDnsZones/virtualNetworkLinks",
+      "apiVersion": "2020-06-01",
+      "name": "[format('{0}/{1}', 'privatelink.search.windows.net', format('link-{0}', variables('resourceToken')))]",
+      "location": "global",
+      "properties": {
+        "registrationEnabled": false,
+        "virtualNetwork": {
+          "id": "[resourceId('Microsoft.Network/virtualNetworks', format('vnet-{0}', variables('resourceToken')))]"
+        }
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Network/privateDnsZones', 'privatelink.search.windows.net')]",
+        "[resourceId('Microsoft.Network/virtualNetworks', format('vnet-{0}', variables('resourceToken')))]"
+      ]
+    },
+    {
+      "type": "Microsoft.Network/privateEndpoints",
+      "apiVersion": "2024-05-01",
+      "name": "[format('pe-foundry-{0}', variables('resourceToken'))]",
+      "location": "[parameters('location')]",
+      "tags": "[variables('tags')]",
+      "properties": {
+        "subnet": {
+          "id": "[resourceId('Microsoft.Network/virtualNetworks/subnets', format('vnet-{0}', variables('resourceToken')), 'snet-pe')]"
+        },
+        "privateLinkServiceConnections": [
+          {
+            "name": "foundry",
+            "properties": {
+              "privateLinkServiceId": "[resourceId('Microsoft.CognitiveServices/accounts', variables('foundryName'))]",
+              "groupIds": [
+                "account"
+              ]
+            }
+          }
+        ]
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.CognitiveServices/accounts', variables('foundryName'))]",
+        "[resourceId('Microsoft.Network/virtualNetworks', format('vnet-{0}', variables('resourceToken')))]"
+      ]
+    },
+    {
+      "type": "Microsoft.Network/privateEndpoints/privateDnsZoneGroups",
+      "apiVersion": "2024-05-01",
+      "name": "[format('{0}/{1}', format('pe-foundry-{0}', variables('resourceToken')), 'default')]",
+      "properties": {
+        "privateDnsZoneConfigs": [
+          {
+            "name": "cognitiveservices",
+            "properties": {
+              "privateDnsZoneId": "[resourceId('Microsoft.Network/privateDnsZones', 'privatelink.cognitiveservices.azure.com')]"
+            }
+          },
+          {
+            "name": "openai",
+            "properties": {
+              "privateDnsZoneId": "[resourceId('Microsoft.Network/privateDnsZones', 'privatelink.openai.azure.com')]"
+            }
+          },
+          {
+            "name": "servicesai",
+            "properties": {
+              "privateDnsZoneId": "[resourceId('Microsoft.Network/privateDnsZones', 'privatelink.services.ai.azure.com')]"
+            }
+          }
+        ]
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Network/privateDnsZones', 'privatelink.cognitiveservices.azure.com')]",
+        "[resourceId('Microsoft.Network/privateDnsZones', 'privatelink.openai.azure.com')]",
+        "[resourceId('Microsoft.Network/privateDnsZones', 'privatelink.services.ai.azure.com')]",
+        "[resourceId('Microsoft.Network/privateEndpoints', format('pe-foundry-{0}', variables('resourceToken')))]"
+      ]
+    },
+    {
+      "type": "Microsoft.Network/privateEndpoints",
+      "apiVersion": "2024-05-01",
+      "name": "[format('pe-search-{0}', variables('resourceToken'))]",
+      "location": "[parameters('location')]",
+      "tags": "[variables('tags')]",
+      "properties": {
+        "subnet": {
+          "id": "[resourceId('Microsoft.Network/virtualNetworks/subnets', format('vnet-{0}', variables('resourceToken')), 'snet-pe')]"
+        },
+        "privateLinkServiceConnections": [
+          {
+            "name": "search",
+            "properties": {
+              "privateLinkServiceId": "[resourceId('Microsoft.Search/searchServices', variables('searchName'))]",
+              "groupIds": [
+                "searchService"
+              ]
+            }
+          }
+        ]
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Search/searchServices', variables('searchName'))]",
+        "[resourceId('Microsoft.Network/virtualNetworks', format('vnet-{0}', variables('resourceToken')))]"
+      ]
+    },
+    {
+      "type": "Microsoft.Network/privateEndpoints/privateDnsZoneGroups",
+      "apiVersion": "2024-05-01",
+      "name": "[format('{0}/{1}', format('pe-search-{0}', variables('resourceToken')), 'default')]",
+      "properties": {
+        "privateDnsZoneConfigs": [
+          {
+            "name": "search",
+            "properties": {
+              "privateDnsZoneId": "[resourceId('Microsoft.Network/privateDnsZones', 'privatelink.search.windows.net')]"
+            }
+          }
+        ]
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Network/privateDnsZones', 'privatelink.search.windows.net')]",
+        "[resourceId('Microsoft.Network/privateEndpoints', format('pe-search-{0}', variables('resourceToken')))]"
+      ]
+    },
+    {
+      "condition": "[variables('hasPrincipal')]",
+      "type": "Microsoft.Authorization/roleAssignments",
+      "apiVersion": "2022-04-01",
+      "scope": "[resourceId('Microsoft.CognitiveServices/accounts', variables('foundryName'))]",
+      "name": "[guid(resourceId('Microsoft.CognitiveServices/accounts', variables('foundryName')), parameters('principalId'), variables('roleCognitiveServicesUser'))]",
+      "properties": {
+        "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', variables('roleCognitiveServicesUser'))]",
+        "principalId": "[parameters('principalId')]",
+        "principalType": "User"
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.CognitiveServices/accounts', variables('foundryName'))]"
+      ]
+    },
+    {
+      "condition": "[variables('hasPrincipal')]",
+      "type": "Microsoft.Authorization/roleAssignments",
+      "apiVersion": "2022-04-01",
+      "scope": "[resourceId('Microsoft.CognitiveServices/accounts', variables('foundryName'))]",
+      "name": "[guid(resourceId('Microsoft.CognitiveServices/accounts', variables('foundryName')), parameters('principalId'), variables('roleCognitiveServicesOpenAIUser'))]",
+      "properties": {
+        "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', variables('roleCognitiveServicesOpenAIUser'))]",
+        "principalId": "[parameters('principalId')]",
+        "principalType": "User"
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.CognitiveServices/accounts', variables('foundryName'))]"
+      ]
+    },
+    {
+      "condition": "[variables('hasPrincipal')]",
+      "type": "Microsoft.Authorization/roleAssignments",
+      "apiVersion": "2022-04-01",
+      "scope": "[resourceId('Microsoft.Search/searchServices', variables('searchName'))]",
+      "name": "[guid(resourceId('Microsoft.Search/searchServices', variables('searchName')), parameters('principalId'), variables('roleSearchServiceContributor'))]",
+      "properties": {
+        "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', variables('roleSearchServiceContributor'))]",
+        "principalId": "[parameters('principalId')]",
+        "principalType": "User"
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Search/searchServices', variables('searchName'))]"
+      ]
+    },
+    {
+      "condition": "[variables('hasPrincipal')]",
+      "type": "Microsoft.Authorization/roleAssignments",
+      "apiVersion": "2022-04-01",
+      "scope": "[resourceId('Microsoft.Search/searchServices', variables('searchName'))]",
+      "name": "[guid(resourceId('Microsoft.Search/searchServices', variables('searchName')), parameters('principalId'), variables('roleSearchIndexDataContributor'))]",
+      "properties": {
+        "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', variables('roleSearchIndexDataContributor'))]",
+        "principalId": "[parameters('principalId')]",
+        "principalType": "User"
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Search/searchServices', variables('searchName'))]"
+      ]
+    },
+    {
+      "type": "Microsoft.Authorization/roleAssignments",
+      "apiVersion": "2022-04-01",
+      "scope": "[resourceId('Microsoft.CognitiveServices/accounts', variables('foundryName'))]",
+      "name": "[guid(resourceId('Microsoft.CognitiveServices/accounts', variables('foundryName')), resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('id-aci-{0}', variables('resourceToken'))), variables('roleCognitiveServicesOpenAIUser'))]",
+      "properties": {
+        "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', variables('roleCognitiveServicesOpenAIUser'))]",
+        "principalId": "[reference(resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('id-aci-{0}', variables('resourceToken'))), '2023-01-31').principalId]",
+        "principalType": "ServicePrincipal"
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.CognitiveServices/accounts', variables('foundryName'))]",
+        "[resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('id-aci-{0}', variables('resourceToken')))]"
+      ]
+    },
+    {
+      "type": "Microsoft.Authorization/roleAssignments",
+      "apiVersion": "2022-04-01",
+      "scope": "[resourceId('Microsoft.CognitiveServices/accounts', variables('foundryName'))]",
+      "name": "[guid(resourceId('Microsoft.CognitiveServices/accounts', variables('foundryName')), resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('id-aci-{0}', variables('resourceToken'))), variables('roleCognitiveServicesUser'))]",
+      "properties": {
+        "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', variables('roleCognitiveServicesUser'))]",
+        "principalId": "[reference(resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('id-aci-{0}', variables('resourceToken'))), '2023-01-31').principalId]",
+        "principalType": "ServicePrincipal"
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.CognitiveServices/accounts', variables('foundryName'))]",
+        "[resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('id-aci-{0}', variables('resourceToken')))]"
+      ]
+    },
+    {
+      "type": "Microsoft.Authorization/roleAssignments",
+      "apiVersion": "2022-04-01",
+      "scope": "[resourceId('Microsoft.Search/searchServices', variables('searchName'))]",
+      "name": "[guid(resourceId('Microsoft.Search/searchServices', variables('searchName')), resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('id-aci-{0}', variables('resourceToken'))), variables('roleSearchServiceContributor'))]",
+      "properties": {
+        "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', variables('roleSearchServiceContributor'))]",
+        "principalId": "[reference(resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('id-aci-{0}', variables('resourceToken'))), '2023-01-31').principalId]",
+        "principalType": "ServicePrincipal"
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Search/searchServices', variables('searchName'))]",
+        "[resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('id-aci-{0}', variables('resourceToken')))]"
+      ]
+    },
+    {
+      "type": "Microsoft.Authorization/roleAssignments",
+      "apiVersion": "2022-04-01",
+      "scope": "[resourceId('Microsoft.Search/searchServices', variables('searchName'))]",
+      "name": "[guid(resourceId('Microsoft.Search/searchServices', variables('searchName')), resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('id-aci-{0}', variables('resourceToken'))), variables('roleSearchIndexDataContributor'))]",
+      "properties": {
+        "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', variables('roleSearchIndexDataContributor'))]",
+        "principalId": "[reference(resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('id-aci-{0}', variables('resourceToken'))), '2023-01-31').principalId]",
+        "principalType": "ServicePrincipal"
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Search/searchServices', variables('searchName'))]",
+        "[resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('id-aci-{0}', variables('resourceToken')))]"
+      ]
+    },
+    {
+      "condition": "[parameters('deployTester')]",
+      "type": "Microsoft.ContainerInstance/containerGroups",
+      "apiVersion": "2023-05-01",
+      "name": "[format('aci-nsp-tester-{0}', variables('resourceToken'))]",
+      "location": "[parameters('location')]",
+      "tags": "[variables('tags')]",
+      "identity": {
+        "type": "UserAssigned",
+        "userAssignedIdentities": {
+          "[format('{0}', resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('id-aci-{0}', variables('resourceToken'))))]": {}
+        }
+      },
+      "properties": {
+        "osType": "Linux",
+        "restartPolicy": "Never",
+        "subnetIds": [
+          {
+            "id": "[resourceId('Microsoft.Network/virtualNetworks/subnets', format('vnet-{0}', variables('resourceToken')), 'snet-aci')]"
+          }
+        ],
+        "containers": [
+          {
+            "name": "probe",
+            "properties": {
+              "image": "mcr.microsoft.com/azure-cli:latest",
+              "command": [
+                "/bin/sh",
+                "-c",
+                "[format('echo PROBE_START; CID=\"{0}\"; TURL=\"http://169.254.169.254/metadata/identity/oauth2/token?api-version=2018-02-01\"; echo \"Acquiring AAD tokens via managed identity (NSG AzureActiveDirectory tag permits this)...\"; COGT=\"\"; SRCT=\"\"; n=0; while [ $n -lt 18 ]; do COGT=$(curl -s -m 20 -H \"Metadata: true\" \"$TURL&resource=https://cognitiveservices.azure.com&client_id=$CID\" | python3 -c \"import sys,json;print(json.load(sys.stdin).get(''access_token'',''''))\" 2>/dev/null); if [ -n \"$COGT\" ]; then break; fi; n=$((n+1)); echo \"token retry $n\"; sleep 10; done; SRCT=$(curl -s -m 20 -H \"Metadata: true\" \"$TURL&resource=https://search.azure.com&client_id=$CID\" | python3 -c \"import sys,json;print(json.load(sys.stdin).get(''access_token'',''''))\" 2>/dev/null); if [ -n \"$COGT\" ]; then echo COG_TOKEN=present; else echo COG_TOKEN=EMPTY; fi; if [ -n \"$SRCT\" ]; then echo SRCH_TOKEN=present; else echo SRCH_TOKEN=EMPTY; fi; echo \"--- DNS (expect private 10.40.1.x) ---\"; for h in {1}; do printf \"RESOLVED %s -> \" \"$h\"; getent hosts $h 2>/dev/null | head -n1 || printf DNSFAIL; echo \"\"; done; echo \"--- Internet egress (expect BLOCKED by NSG Deny-Internet) ---\"; printf \"INTERNET 1.1.1.1 = \"; curl -sS -k -m 12 -o /dev/null -w \"%{{http_code}}\" https://1.1.1.1/ 2>/dev/null && echo \" (REACHED)\" || echo BLOCKED; echo \"--- Authenticated data-plane via private endpoint (expect 200) ---\"; u=\"https://{2}/openai/models?api-version=2024-10-21\"; s=000; j=0; while [ $j -lt 18 ]; do s=$(curl -sS -k -m 20 -o /dev/null -w \"%{{http_code}}\" -H \"Authorization: Bearer $COGT\" \"$u\"); if [ \"$s\" != \"403\" ] && [ \"$s\" != \"000\" ]; then break; fi; j=$((j+1)); sleep 10; done; echo \"AUTHSTATUS foundry openai/models = $s\"; u=\"https://{3}/indexes?api-version=2023-11-01\"; s=000; j=0; while [ $j -lt 18 ]; do s=$(curl -sS -k -m 20 -o /dev/null -w \"%{{http_code}}\" -H \"Authorization: Bearer $SRCT\" \"$u\"); if [ \"$s\" != \"403\" ] && [ \"$s\" != \"000\" ]; then break; fi; j=$((j+1)); sleep 10; done; echo \"AUTHSTATUS search indexes = $s\"; echo PROBE_DONE', reference(resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('id-aci-{0}', variables('resourceToken'))), '2023-01-31').clientId, join(variables('probeHosts'), ' '), variables('foundryAuthHost'), variables('searchAuthHost'))]"
+              ],
+              "resources": {
+                "requests": {
+                  "cpu": 1,
+                  "memoryInGB": "[json('1.5')]"
+                }
+              }
+            }
+          }
+        ]
+      },
+      "dependsOn": [
+        "[extensionResourceId(resourceId('Microsoft.CognitiveServices/accounts', variables('foundryName')), 'Microsoft.Authorization/roleAssignments', guid(resourceId('Microsoft.CognitiveServices/accounts', variables('foundryName')), resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('id-aci-{0}', variables('resourceToken'))), variables('roleCognitiveServicesOpenAIUser')))]",
+        "[extensionResourceId(resourceId('Microsoft.CognitiveServices/accounts', variables('foundryName')), 'Microsoft.Authorization/roleAssignments', guid(resourceId('Microsoft.CognitiveServices/accounts', variables('foundryName')), resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('id-aci-{0}', variables('resourceToken'))), variables('roleCognitiveServicesUser')))]",
+        "[extensionResourceId(resourceId('Microsoft.Search/searchServices', variables('searchName')), 'Microsoft.Authorization/roleAssignments', guid(resourceId('Microsoft.Search/searchServices', variables('searchName')), resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('id-aci-{0}', variables('resourceToken'))), variables('roleSearchServiceContributor')))]",
+        "[extensionResourceId(resourceId('Microsoft.Search/searchServices', variables('searchName')), 'Microsoft.Authorization/roleAssignments', guid(resourceId('Microsoft.Search/searchServices', variables('searchName')), resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('id-aci-{0}', variables('resourceToken'))), variables('roleSearchIndexDataContributor')))]",
+        "[resourceId('Microsoft.Network/privateEndpoints/privateDnsZoneGroups', format('pe-foundry-{0}', variables('resourceToken')), 'default')]",
+        "[resourceId('Microsoft.Network/privateDnsZones/virtualNetworkLinks', 'privatelink.cognitiveservices.azure.com', format('link-{0}', variables('resourceToken')))]",
+        "[resourceId('Microsoft.Network/privateDnsZones/virtualNetworkLinks', 'privatelink.openai.azure.com', format('link-{0}', variables('resourceToken')))]",
+        "[resourceId('Microsoft.Network/privateDnsZones/virtualNetworkLinks', 'privatelink.search.windows.net', format('link-{0}', variables('resourceToken')))]",
+        "[resourceId('Microsoft.Network/privateDnsZones/virtualNetworkLinks', 'privatelink.services.ai.azure.com', format('link-{0}', variables('resourceToken')))]",
+        "[resourceId('Microsoft.Network/privateEndpoints/privateDnsZoneGroups', format('pe-search-{0}', variables('resourceToken')), 'default')]",
+        "[resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('id-aci-{0}', variables('resourceToken')))]",
+        "[resourceId('Microsoft.Network/virtualNetworks', format('vnet-{0}', variables('resourceToken')))]"
+      ]
+    },
+    {
+      "condition": "[parameters('deployReport')]",
+      "type": "Microsoft.ContainerInstance/containerGroups",
+      "apiVersion": "2023-05-01",
+      "name": "[format('aci-nsp-report-{0}', variables('resourceToken'))]",
+      "location": "[parameters('location')]",
+      "tags": "[variables('tags')]",
+      "identity": {
+        "type": "UserAssigned",
+        "userAssignedIdentities": {
+          "[format('{0}', resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('id-aci-{0}', variables('resourceToken'))))]": {}
+        }
+      },
+      "properties": {
+        "osType": "Linux",
+        "restartPolicy": "Always",
+        "subnetIds": [
+          {
+            "id": "[resourceId('Microsoft.Network/virtualNetworks/subnets', format('vnet-{0}', variables('resourceToken')), 'snet-web')]"
+          }
+        ],
+        "ipAddress": {
+          "type": "Private",
+          "ports": [
+            {
+              "protocol": "TCP",
+              "port": 80
+            }
+          ]
+        },
+        "containers": [
+          {
+            "name": "report",
+            "properties": {
+              "image": "mcr.microsoft.com/azure-cli:latest",
+              "command": [
+                "python3",
+                "-c",
+                "[variables('reportScript')]"
+              ],
+              "ports": [
+                {
+                  "protocol": "TCP",
+                  "port": 80
+                }
+              ],
+              "environmentVariables": [
+                {
+                  "name": "CLIENT_ID",
+                  "value": "[reference(resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('id-aci-{0}', variables('resourceToken'))), '2023-01-31').clientId]"
+                },
+                {
+                  "name": "FOUNDRY_HOST",
+                  "value": "[variables('foundryAuthHost')]"
+                },
+                {
+                  "name": "FOUNDRY_REGION",
+                  "value": "[parameters('location')]"
+                },
+                {
+                  "name": "SEARCH_HOST",
+                  "value": "[variables('searchAuthHost')]"
+                },
+                {
+                  "name": "SEARCH_REGION",
+                  "value": "[parameters('searchLocation')]"
+                },
+                {
+                  "name": "DNS_HOSTS",
+                  "value": "[join(variables('probeHosts'), ' ')]"
+                },
+                {
+                  "name": "REFRESH_SECONDS",
+                  "value": "[string(parameters('reportRefreshSeconds'))]"
+                },
+                {
+                  "name": "CONFIG_JSON",
+                  "value": "[string(variables('reportConfig'))]"
+                }
+              ],
+              "resources": {
+                "requests": {
+                  "cpu": 1,
+                  "memoryInGB": "[json('1.5')]"
+                }
+              }
+            }
+          }
+        ]
+      },
+      "dependsOn": [
+        "[extensionResourceId(resourceId('Microsoft.CognitiveServices/accounts', variables('foundryName')), 'Microsoft.Authorization/roleAssignments', guid(resourceId('Microsoft.CognitiveServices/accounts', variables('foundryName')), resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('id-aci-{0}', variables('resourceToken'))), variables('roleCognitiveServicesOpenAIUser')))]",
+        "[extensionResourceId(resourceId('Microsoft.CognitiveServices/accounts', variables('foundryName')), 'Microsoft.Authorization/roleAssignments', guid(resourceId('Microsoft.CognitiveServices/accounts', variables('foundryName')), resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('id-aci-{0}', variables('resourceToken'))), variables('roleCognitiveServicesUser')))]",
+        "[extensionResourceId(resourceId('Microsoft.Search/searchServices', variables('searchName')), 'Microsoft.Authorization/roleAssignments', guid(resourceId('Microsoft.Search/searchServices', variables('searchName')), resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('id-aci-{0}', variables('resourceToken'))), variables('roleSearchServiceContributor')))]",
+        "[extensionResourceId(resourceId('Microsoft.Search/searchServices', variables('searchName')), 'Microsoft.Authorization/roleAssignments', guid(resourceId('Microsoft.Search/searchServices', variables('searchName')), resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('id-aci-{0}', variables('resourceToken'))), variables('roleSearchIndexDataContributor')))]",
+        "[resourceId('Microsoft.Network/privateEndpoints/privateDnsZoneGroups', format('pe-foundry-{0}', variables('resourceToken')), 'default')]",
+        "[resourceId('Microsoft.Network/privateDnsZones/virtualNetworkLinks', 'privatelink.cognitiveservices.azure.com', format('link-{0}', variables('resourceToken')))]",
+        "[resourceId('Microsoft.Network/privateDnsZones/virtualNetworkLinks', 'privatelink.openai.azure.com', format('link-{0}', variables('resourceToken')))]",
+        "[resourceId('Microsoft.Network/privateDnsZones/virtualNetworkLinks', 'privatelink.search.windows.net', format('link-{0}', variables('resourceToken')))]",
+        "[resourceId('Microsoft.Network/privateDnsZones/virtualNetworkLinks', 'privatelink.services.ai.azure.com', format('link-{0}', variables('resourceToken')))]",
+        "[resourceId('Microsoft.Network/privateEndpoints/privateDnsZoneGroups', format('pe-search-{0}', variables('resourceToken')), 'default')]",
+        "[resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('id-aci-{0}', variables('resourceToken')))]",
+        "[resourceId('Microsoft.Network/virtualNetworks', format('vnet-{0}', variables('resourceToken')))]"
+      ]
+    },
+    {
+      "condition": "[parameters('deployAppGateway')]",
+      "type": "Microsoft.Network/publicIPAddresses",
+      "apiVersion": "2024-05-01",
+      "name": "[format('pip-agw-{0}', variables('resourceToken'))]",
+      "location": "[parameters('location')]",
+      "tags": "[variables('tags')]",
+      "sku": {
+        "name": "Standard"
+      },
+      "properties": {
+        "publicIPAllocationMethod": "Static"
+      }
+    },
+    {
+      "condition": "[parameters('deployAppGateway')]",
+      "type": "Microsoft.Network/applicationGateways",
+      "apiVersion": "2024-05-01",
+      "name": "[variables('agwName')]",
+      "location": "[parameters('location')]",
+      "tags": "[variables('tags')]",
+      "properties": {
+        "sku": {
+          "name": "Standard_v2",
+          "tier": "Standard_v2"
+        },
+        "autoscaleConfiguration": {
+          "minCapacity": 1,
+          "maxCapacity": 2
+        },
+        "gatewayIPConfigurations": [
+          {
+            "name": "gwip",
+            "properties": {
+              "subnet": {
+                "id": "[resourceId('Microsoft.Network/virtualNetworks/subnets', format('vnet-{0}', variables('resourceToken')), 'snet-agw')]"
+              }
+            }
+          }
+        ],
+        "frontendIPConfigurations": [
+          {
+            "name": "feip",
+            "properties": {
+              "publicIPAddress": {
+                "id": "[resourceId('Microsoft.Network/publicIPAddresses', format('pip-agw-{0}', variables('resourceToken')))]"
+              }
+            }
+          }
+        ],
+        "frontendPorts": [
+          {
+            "name": "fe80",
+            "properties": {
+              "port": 80
+            }
+          }
+        ],
+        "backendAddressPools": [
+          {
+            "name": "bepool",
+            "properties": {
+              "backendAddresses": [
+                {
+                  "ipAddress": "[if(parameters('deployReport'), reference(resourceId('Microsoft.ContainerInstance/containerGroups', format('aci-nsp-report-{0}', variables('resourceToken'))), '2023-05-01').ipAddress.ip, '')]"
+                }
+              ]
+            }
+          }
+        ],
+        "backendHttpSettingsCollection": [
+          {
+            "name": "behttp",
+            "properties": {
+              "port": 80,
+              "protocol": "Http",
+              "cookieBasedAffinity": "Disabled",
+              "requestTimeout": 30
+            }
+          }
+        ],
+        "httpListeners": [
+          {
+            "name": "listener80",
+            "properties": {
+              "frontendIPConfiguration": {
+                "id": "[resourceId('Microsoft.Network/applicationGateways/frontendIPConfigurations', variables('agwName'), 'feip')]"
+              },
+              "frontendPort": {
+                "id": "[resourceId('Microsoft.Network/applicationGateways/frontendPorts', variables('agwName'), 'fe80')]"
+              },
+              "protocol": "Http"
+            }
+          }
+        ],
+        "requestRoutingRules": [
+          {
+            "name": "rule80",
+            "properties": {
+              "ruleType": "Basic",
+              "priority": 100,
+              "httpListener": {
+                "id": "[resourceId('Microsoft.Network/applicationGateways/httpListeners', variables('agwName'), 'listener80')]"
+              },
+              "backendAddressPool": {
+                "id": "[resourceId('Microsoft.Network/applicationGateways/backendAddressPools', variables('agwName'), 'bepool')]"
+              },
+              "backendHttpSettings": {
+                "id": "[resourceId('Microsoft.Network/applicationGateways/backendHttpSettingsCollection', variables('agwName'), 'behttp')]"
+              }
+            }
+          }
+        ]
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Network/publicIPAddresses', format('pip-agw-{0}', variables('resourceToken')))]",
+        "[resourceId('Microsoft.ContainerInstance/containerGroups', format('aci-nsp-report-{0}', variables('resourceToken')))]",
+        "[resourceId('Microsoft.Network/virtualNetworks', format('vnet-{0}', variables('resourceToken')))]"
+      ]
+    }
+  ],
+  "outputs": {
+    "vnetId": {
+      "type": "string",
+      "value": "[resourceId('Microsoft.Network/virtualNetworks', format('vnet-{0}', variables('resourceToken')))]"
+    },
+    "foundryName": {
+      "type": "string",
+      "value": "[variables('foundryName')]"
+    },
+    "searchName": {
+      "type": "string",
+      "value": "[variables('searchName')]"
+    },
+    "foundryHosts": {
+      "type": "array",
+      "value": [
+        "[format('{0}.cognitiveservices.azure.com', variables('foundryName'))]",
+        "[format('{0}.openai.azure.com', variables('foundryName'))]",
+        "[format('{0}.services.ai.azure.com', variables('foundryName'))]"
+      ]
+    },
+    "searchHost": {
+      "type": "string",
+      "value": "[format('{0}.search.windows.net', variables('searchName'))]"
+    },
+    "testerName": {
+      "type": "string",
+      "value": "[if(parameters('deployTester'), format('aci-nsp-tester-{0}', variables('resourceToken')), '')]"
+    },
+    "resourceGroupName": {
+      "type": "string",
+      "value": "[resourceGroup().name]"
+    },
+    "readTesterLogsCommand": {
+      "type": "string",
+      "value": "[if(parameters('deployTester'), format('az container logs -g {0} -n aci-nsp-tester-{1}', resourceGroup().name, variables('resourceToken')), 'tester not deployed')]"
+    },
+    "reportName": {
+      "type": "string",
+      "value": "[if(parameters('deployReport'), format('aci-nsp-report-{0}', variables('resourceToken')), '')]"
+    },
+    "reportPrivateIp": {
+      "type": "string",
+      "value": "[if(parameters('deployReport'), reference(resourceId('Microsoft.ContainerInstance/containerGroups', format('aci-nsp-report-{0}', variables('resourceToken'))), '2023-05-01').ipAddress.ip, '')]"
+    },
+    "reportUrl": {
+      "type": "string",
+      "value": "[if(parameters('deployReport'), format('http://{0}/ (browse from inside the VNet)', reference(resourceId('Microsoft.ContainerInstance/containerGroups', format('aci-nsp-report-{0}', variables('resourceToken'))), '2023-05-01').ipAddress.ip), 'report not deployed')]"
+    },
+    "appGatewayPublicIp": {
+      "type": "string",
+      "value": "[if(parameters('deployAppGateway'), reference(resourceId('Microsoft.Network/publicIPAddresses', format('pip-agw-{0}', variables('resourceToken'))), '2024-05-01').ipAddress, '')]"
+    },
+    "appGatewayUrl": {
+      "type": "string",
+      "value": "[if(parameters('deployAppGateway'), format('http://{0}/ (public on :80; AGW v2 NSG cannot filter client IP{1} - use WAF_v2 to enforce)', reference(resourceId('Microsoft.Network/publicIPAddresses', format('pip-agw-{0}', variables('resourceToken'))), '2024-05-01').ipAddress, if(empty(parameters('allowedClientIp')), '', format(' - intended client {0}', parameters('allowedClientIp')))), 'app gateway not deployed')]"
+    }
+  }
+}

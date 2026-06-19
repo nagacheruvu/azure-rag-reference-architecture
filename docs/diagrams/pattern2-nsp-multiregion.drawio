@@ -1,0 +1,158 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mxfile host="app.diagrams.net" modified="2026-06-28" type="device">
+  <diagram id="pattern2" name="Pattern 2 - NSP Cross-Region">
+    <mxGraphModel dx="1600" dy="1100" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1500" pageHeight="1000" math="0" shadow="0">
+      <root>
+        <mxCell id="0"/>
+        <mxCell id="1" parent="0"/>
+
+        <!-- Title -->
+        <mxCell id="title" value="Pattern 2 — AI Foundry + AI Search Multi-Region Behind One NSP" style="text;html=1;align=center;verticalAlign=middle;resizable=0;points=[];autosize=1;strokeColor=none;fillColor=none;fontSize=18;fontFamily=Segoe UI;fontStyle=1;fontColor=#242424;" vertex="1" parent="1">
+          <mxGeometry x="300" y="20" width="700" height="40" as="geometry"/>
+        </mxCell>
+        <mxCell id="subtitle" value="Cross-region trust • Central governance • Learning → Audit → Enforced • NspAccessLogs" style="text;html=1;align=center;verticalAlign=middle;resizable=0;points=[];autosize=1;strokeColor=none;fillColor=none;fontSize=11;fontFamily=Segoe UI;fontColor=#616161;" vertex="1" parent="1">
+          <mxGeometry x="350" y="55" width="600" height="25" as="geometry"/>
+        </mxCell>
+
+        <!-- Approved Client -->
+        <mxCell id="client" value="Approved Client&#xa;(CIDR Allow-List)" style="shape=ellipse;whiteSpace=wrap;html=1;fillColor=#F3F2F1;strokeColor=#616161;fontFamily=Segoe UI;fontSize=10;fontColor=#242424;" vertex="1" parent="1">
+          <mxGeometry x="100" y="200" width="140" height="60" as="geometry"/>
+        </mxCell>
+
+        <!-- ═══════════ NSP Boundary ═══════════ -->
+        <mxCell id="nsp" value="Network Security Perimeter — Single Profile, Cross-Region Trust" style="rounded=1;whiteSpace=wrap;html=1;fillColor=none;strokeColor=#0078D4;strokeWidth=3;fontFamily=Segoe UI;fontSize=13;fontStyle=1;fontColor=#0078D4;verticalAlign=top;align=center;spacingTop=8;arcSize=4;" vertex="1" parent="1">
+          <mxGeometry x="320" y="120" width="1050" height="500" as="geometry"/>
+        </mxCell>
+
+        <!-- Region A inside NSP -->
+        <mxCell id="regionA" value="Region A — East US" style="rounded=1;whiteSpace=wrap;html=1;fillColor=none;strokeColor=#107C10;strokeWidth=2;fontFamily=Segoe UI;fontSize=11;fontStyle=1;fontColor=#107C10;verticalAlign=top;align=left;spacingLeft=10;spacingTop=5;arcSize=4;" vertex="1" parent="1">
+          <mxGeometry x="380" y="170" width="450" height="400" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="foundry" value="Azure AI Foundry&#xa;AIServices Account&#xa;+ Agent Service" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#DFF6DD;strokeColor=#107C10;fontFamily=Segoe UI;fontSize=11;fontColor=#242424;fontStyle=1;strokeWidth=2;" vertex="1" parent="1">
+          <mxGeometry x="430" y="230" width="180" height="65" as="geometry"/>
+        </mxCell>
+        <mxCell id="aoai" value="Azure OpenAI Deployments&#xa;gpt-4o-mini (Global Standard)&#xa;text-embedding-3-large" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#DFF6DD;strokeColor=#107C10;fontFamily=Segoe UI;fontSize=10;fontColor=#242424;" vertex="1" parent="1">
+          <mxGeometry x="430" y="340" width="200" height="60" as="geometry"/>
+        </mxCell>
+        <mxCell id="aca" value="Container Apps API&#xa;SSE Streaming&#xa;(User-Assigned MI)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#CFE4FA;strokeColor=#0078D4;fontFamily=Segoe UI;fontSize=10;fontColor=#242424;" vertex="1" parent="1">
+          <mxGeometry x="430" y="450" width="160" height="55" as="geometry"/>
+        </mxCell>
+        <mxCell id="cosmos_a" value="Cosmos DB&#xa;Chat History" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFF4CE;strokeColor=#F7630C;fontFamily=Segoe UI;fontSize=10;fontColor=#242424;" vertex="1" parent="1">
+          <mxGeometry x="650" y="450" width="120" height="45" as="geometry"/>
+        </mxCell>
+
+        <!-- Region B inside NSP -->
+        <mxCell id="regionB" value="Region B — West US 2" style="rounded=1;whiteSpace=wrap;html=1;fillColor=none;strokeColor=#5C2D91;strokeWidth=2;fontFamily=Segoe UI;fontSize=11;fontStyle=1;fontColor=#5C2D91;verticalAlign=top;align=left;spacingLeft=10;spacingTop=5;arcSize=4;" vertex="1" parent="1">
+          <mxGeometry x="900" y="170" width="410" height="400" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="search" value="Azure AI Search&#xa;Vector + Semantic Index&#xa;Integrated Vectorization&#xa;Replicas + Partitions" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#DFF6DD;strokeColor=#107C10;fontFamily=Segoe UI;fontSize=11;fontColor=#242424;fontStyle=1;strokeWidth=2;" vertex="1" parent="1">
+          <mxGeometry x="970" y="250" width="200" height="75" as="geometry"/>
+        </mxCell>
+        <mxCell id="blob_b" value="Blob Storage&#xa;Document Source" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F3F2F1;strokeColor=#616161;fontFamily=Segoe UI;fontSize=10;fontColor=#242424;" vertex="1" parent="1">
+          <mxGeometry x="990" y="380" width="130" height="45" as="geometry"/>
+        </mxCell>
+        <mxCell id="indexer" value="AI Search Indexer&#xa;+ Skillset&#xa;(Integrated Vectorization)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#DFF6DD;strokeColor=#107C10;fontFamily=Segoe UI;fontSize=10;fontColor=#242424;" vertex="1" parent="1">
+          <mxGeometry x="970" y="460" width="175" height="55" as="geometry"/>
+        </mxCell>
+
+        <!-- Cross-region trust arrow -->
+        <mxCell id="e_foundry_search" value="Intra-Perimeter&#xa;Allowed" style="edgeStyle=orthogonalEdgeStyle;strokeColor=#0078D4;strokeWidth=2.5;endArrow=blockThin;endFill=1;startArrow=blockThin;startFill=1;dashed=0;fontFamily=Segoe UI;fontSize=9;fontColor=#0078D4;labelBackgroundColor=#FFFFFF;" edge="1" source="foundry" target="search" parent="1">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+
+        <!-- Foundry to AOAI -->
+        <mxCell id="e_foundry_aoai" style="edgeStyle=orthogonalEdgeStyle;strokeColor=#107C10;strokeWidth=1.5;endArrow=blockThin;endFill=1;" edge="1" source="foundry" target="aoai" parent="1">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+
+        <!-- ACA to Foundry -->
+        <mxCell id="e_aca_foundry" style="edgeStyle=orthogonalEdgeStyle;strokeColor=#107C10;strokeWidth=1.5;endArrow=blockThin;endFill=1;" edge="1" source="aca" target="foundry" parent="1">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+
+        <!-- ACA to Cosmos -->
+        <mxCell id="e_aca_cosmos" style="edgeStyle=orthogonalEdgeStyle;strokeColor=#F7630C;strokeWidth=1.5;endArrow=blockThin;endFill=1;" edge="1" source="aca" target="cosmos_a" parent="1">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+
+        <!-- Indexer to Blob -->
+        <mxCell id="e_indexer_blob" style="edgeStyle=orthogonalEdgeStyle;strokeColor=#616161;strokeWidth=1.5;endArrow=blockThin;endFill=1;" edge="1" source="indexer" target="blob_b" parent="1">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+
+        <!-- Indexer to Search -->
+        <mxCell id="e_indexer_search" style="edgeStyle=orthogonalEdgeStyle;strokeColor=#107C10;strokeWidth=1.5;endArrow=blockThin;endFill=1;" edge="1" source="indexer" target="search" parent="1">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+
+        <!-- Client inbound -->
+        <mxCell id="e_client_foundry" value="Inbound IP Rule" style="edgeStyle=orthogonalEdgeStyle;strokeColor=#D13438;strokeWidth=2;endArrow=blockThin;endFill=1;fontFamily=Segoe UI;fontSize=9;fontColor=#D13438;labelBackgroundColor=#FFFFFF;" edge="1" source="client" target="aca" parent="1">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+
+        <!-- ═══════════ Governance Layer ═══════════ -->
+        <mxCell id="gov_box" value="Governance &amp; Observability" style="rounded=1;whiteSpace=wrap;html=1;fillColor=none;strokeColor=#F7630C;strokeWidth=2;dashed=1;fontFamily=Segoe UI;fontSize=12;fontStyle=1;fontColor=#F7630C;verticalAlign=top;align=center;spacingTop=5;arcSize=4;" vertex="1" parent="1">
+          <mxGeometry x="320" y="680" width="1050" height="110" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="law" value="Log Analytics&#xa;NspAccessLogs&#xa;(Allow/Deny)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFF4CE;strokeColor=#F7630C;fontFamily=Segoe UI;fontSize=10;fontColor=#242424;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="400" y="710" width="150" height="55" as="geometry"/>
+        </mxCell>
+        <mxCell id="mode" value="Access Mode Rollout:&#xa;Learning → Audit → Enforced" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FDE7E9;strokeColor=#D13438;fontFamily=Segoe UI;fontSize=10;fontColor=#242424;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="620" y="710" width="200" height="50" as="geometry"/>
+        </mxCell>
+        <mxCell id="appinsights" value="Application Insights&#xa;Token Usage + Latency" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFF4CE;strokeColor=#F7630C;fontFamily=Segoe UI;fontSize=10;fontColor=#242424;" vertex="1" parent="1">
+          <mxGeometry x="890" y="710" width="160" height="50" as="geometry"/>
+        </mxCell>
+        <mxCell id="mi" value="Managed Identity&#xa;(Secretless Auth)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFF4CE;strokeColor=#F7630C;fontFamily=Segoe UI;fontSize=10;fontColor=#242424;" vertex="1" parent="1">
+          <mxGeometry x="1110" y="710" width="140" height="50" as="geometry"/>
+        </mxCell>
+
+        <!-- NSP to Log Analytics -->
+        <mxCell id="e_nsp_law" value="Access Logs" style="edgeStyle=orthogonalEdgeStyle;strokeColor=#F7630C;strokeWidth=1.5;endArrow=blockThin;endFill=1;dashed=1;fontFamily=Segoe UI;fontSize=9;fontColor=#F7630C;" edge="1" source="nsp" target="law" parent="1">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+
+        <!-- Mode arrow to NSP -->
+        <mxCell id="e_mode_nsp" style="edgeStyle=orthogonalEdgeStyle;strokeColor=#D13438;strokeWidth=1.5;endArrow=blockThin;endFill=1;dashed=1;" edge="1" source="mode" target="nsp" parent="1">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+
+        <!-- ═══════════ Legend ═══════════ -->
+        <mxCell id="legend_box" value="" style="rounded=1;whiteSpace=wrap;html=1;fillColor=none;strokeColor=#242424;strokeWidth=1;arcSize=10;" vertex="1" parent="1">
+          <mxGeometry x="60" y="680" width="200" height="110" as="geometry"/>
+        </mxCell>
+        <mxCell id="legend_title" value="Legend" style="text;html=1;align=left;verticalAlign=middle;strokeColor=none;fillColor=none;fontFamily=Segoe UI;fontSize=10;fontStyle=1;fontColor=#242424;" vertex="1" parent="1">
+          <mxGeometry x="70" y="685" width="60" height="18" as="geometry"/>
+        </mxCell>
+        <mxCell id="l1" value="" style="rounded=1;fillColor=#DFF6DD;strokeColor=#107C10;" vertex="1" parent="1">
+          <mxGeometry x="75" y="710" width="14" height="14" as="geometry"/>
+        </mxCell>
+        <mxCell id="l1t" value="AI Services" style="text;html=1;align=left;verticalAlign=middle;strokeColor=none;fillColor=none;fontFamily=Segoe UI;fontSize=9;fontColor=#242424;" vertex="1" parent="1">
+          <mxGeometry x="95" y="708" width="100" height="18" as="geometry"/>
+        </mxCell>
+        <mxCell id="l2" value="" style="rounded=1;fillColor=#CFE4FA;strokeColor=#0078D4;" vertex="1" parent="1">
+          <mxGeometry x="75" y="730" width="14" height="14" as="geometry"/>
+        </mxCell>
+        <mxCell id="l2t" value="Compute / Platform" style="text;html=1;align=left;verticalAlign=middle;strokeColor=none;fillColor=none;fontFamily=Segoe UI;fontSize=9;fontColor=#242424;" vertex="1" parent="1">
+          <mxGeometry x="95" y="728" width="120" height="18" as="geometry"/>
+        </mxCell>
+        <mxCell id="l3" value="" style="rounded=1;fillColor=#FFF4CE;strokeColor=#F7630C;" vertex="1" parent="1">
+          <mxGeometry x="75" y="750" width="14" height="14" as="geometry"/>
+        </mxCell>
+        <mxCell id="l3t" value="Operations / Governance" style="text;html=1;align=left;verticalAlign=middle;strokeColor=none;fillColor=none;fontFamily=Segoe UI;fontSize=9;fontColor=#242424;" vertex="1" parent="1">
+          <mxGeometry x="95" y="748" width="140" height="18" as="geometry"/>
+        </mxCell>
+        <mxCell id="l4" value="" style="rounded=1;fillColor=#FDE7E9;strokeColor=#D13438;" vertex="1" parent="1">
+          <mxGeometry x="75" y="770" width="14" height="14" as="geometry"/>
+        </mxCell>
+        <mxCell id="l4t" value="Security Boundary" style="text;html=1;align=left;verticalAlign=middle;strokeColor=none;fillColor=none;fontFamily=Segoe UI;fontSize=9;fontColor=#242424;" vertex="1" parent="1">
+          <mxGeometry x="95" y="768" width="120" height="18" as="geometry"/>
+        </mxCell>
+
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

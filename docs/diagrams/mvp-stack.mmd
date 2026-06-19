@@ -1,0 +1,5 @@
+flowchart LR
+    UI[Static Web App<br/>React chat] --> API[Container App<br/>or App Service]
+    API --> AGENT[AI Foundry Agent<br/>+ AI Search index]
+    API --> COSMOS[(Cosmos DB serverless<br/>chat history)]
+    BLOB[(Blob Storage)] --> AGENT

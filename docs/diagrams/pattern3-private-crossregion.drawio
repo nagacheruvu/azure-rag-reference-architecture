@@ -1,0 +1,216 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mxfile host="app.diagrams.net" modified="2026-06-28" type="device">
+  <diagram id="pattern3" name="Pattern 3 - Fully Private Cross-Region">
+    <mxGraphModel dx="1800" dy="1300" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1700" pageHeight="1200" math="0" shadow="0">
+      <root>
+        <mxCell id="0"/>
+        <mxCell id="1" parent="0"/>
+
+        <!-- Title -->
+        <mxCell id="title" value="Pattern 3 — Foundry (Central US) + AI Search (East US) Fully Private Cross-Region" style="text;html=1;align=center;verticalAlign=middle;resizable=0;points=[];autosize=1;strokeColor=none;fillColor=none;fontSize=18;fontFamily=Segoe UI;fontStyle=1;fontColor=#242424;" vertex="1" parent="1">
+          <mxGeometry x="250" y="20" width="900" height="40" as="geometry"/>
+        </mxCell>
+        <mxCell id="subtitle" value="Public access DISABLED • Private Endpoints + Private DNS • NSG-locked egress • Entra-only auth • No secrets" style="text;html=1;align=center;verticalAlign=middle;resizable=0;points=[];autosize=1;strokeColor=none;fillColor=none;fontSize=11;fontFamily=Segoe UI;fontColor=#616161;" vertex="1" parent="1">
+          <mxGeometry x="300" y="55" width="800" height="25" as="geometry"/>
+        </mxCell>
+
+        <!-- ═══════════ VNet Container ═══════════ -->
+        <mxCell id="vnet" value="Hub/Spoke VNet — Central US (10.40.0.0/16)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=none;strokeColor=#0078D4;strokeWidth=3;fontFamily=Segoe UI;fontSize=14;fontStyle=1;fontColor=#0078D4;verticalAlign=top;align=center;spacingTop=8;arcSize=3;" vertex="1" parent="1">
+          <mxGeometry x="80" y="100" width="700" height="680" as="geometry"/>
+        </mxCell>
+
+        <!-- Private Endpoint Subnet -->
+        <mxCell id="pe_subnet" value="snet-pe — Private Endpoint Subnet" style="rounded=1;whiteSpace=wrap;html=1;fillColor=none;strokeColor=#5C2D91;strokeWidth=2;fontFamily=Segoe UI;fontSize=11;fontStyle=1;fontColor=#5C2D91;verticalAlign=top;align=left;spacingLeft=10;spacingTop=5;arcSize=4;" vertex="1" parent="1">
+          <mxGeometry x="120" y="160" width="350" height="280" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="pe_foundry" value="Private Endpoint&#xa;→ AI Foundry&#xa;group: account&#xa;(In-Region)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E8DAEF;strokeColor=#5C2D91;fontFamily=Segoe UI;fontSize=10;fontColor=#242424;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="150" y="210" width="140" height="70" as="geometry"/>
+        </mxCell>
+        <mxCell id="pe_search" value="Private Endpoint&#xa;→ AI Search&#xa;group: searchService&#xa;(CROSS-REGION)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E8DAEF;strokeColor=#5C2D91;fontFamily=Segoe UI;fontSize=10;fontColor=#242424;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="310" y="210" width="145" height="70" as="geometry"/>
+        </mxCell>
+        <mxCell id="pe_cosmos" value="Private Endpoint&#xa;→ Cosmos DB" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E8DAEF;strokeColor=#5C2D91;fontFamily=Segoe UI;fontSize=10;fontColor=#242424;" vertex="1" parent="1">
+          <mxGeometry x="150" y="310" width="130" height="50" as="geometry"/>
+        </mxCell>
+        <mxCell id="pe_blob" value="Private Endpoint&#xa;→ Blob Storage" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E8DAEF;strokeColor=#5C2D91;fontFamily=Segoe UI;fontSize=10;fontColor=#242424;" vertex="1" parent="1">
+          <mxGeometry x="310" y="310" width="130" height="50" as="geometry"/>
+        </mxCell>
+
+        <!-- Compute Subnet -->
+        <mxCell id="compute_subnet" value="snet-compute — Container Apps Environment" style="rounded=1;whiteSpace=wrap;html=1;fillColor=none;strokeColor=#0078D4;strokeWidth=2;fontFamily=Segoe UI;fontSize=11;fontStyle=1;fontColor=#0078D4;verticalAlign=top;align=left;spacingLeft=10;spacingTop=5;arcSize=4;" vertex="1" parent="1">
+          <mxGeometry x="120" y="480" width="350" height="160" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="aca" value="Container Apps / ACI&#xa;Chat API + Agent Client&#xa;User-Assigned Managed Identity" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#CFE4FA;strokeColor=#0078D4;fontFamily=Segoe UI;fontSize=10;fontColor=#242424;fontStyle=1;strokeWidth=2;" vertex="1" parent="1">
+          <mxGeometry x="150" y="520" width="210" height="60" as="geometry"/>
+        </mxCell>
+        <mxCell id="aci_probe" value="ACI Probe&#xa;(DNS + HTTPS Validation)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#CFE4FA;strokeColor=#0078D4;fontFamily=Segoe UI;fontSize=9;fontColor=#242424;" vertex="1" parent="1">
+          <mxGeometry x="380" y="530" width="130" height="45" as="geometry"/>
+        </mxCell>
+
+        <!-- DNS Zone -->
+        <mxCell id="dns_box" value="Private DNS Zones" style="rounded=1;whiteSpace=wrap;html=1;fillColor=none;strokeColor=#F7630C;strokeWidth=2;fontFamily=Segoe UI;fontSize=11;fontStyle=1;fontColor=#F7630C;verticalAlign=top;align=left;spacingLeft=10;spacingTop=5;arcSize=4;" vertex="1" parent="1">
+          <mxGeometry x="520" y="160" width="230" height="280" as="geometry"/>
+        </mxCell>
+        <mxCell id="dns1" value="privatelink.openai&#xa;.azure.com" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFF4CE;strokeColor=#F7630C;fontFamily=Segoe UI;fontSize=9;fontColor=#242424;" vertex="1" parent="1">
+          <mxGeometry x="540" y="200" width="150" height="35" as="geometry"/>
+        </mxCell>
+        <mxCell id="dns2" value="privatelink.cognitiveservices&#xa;.azure.com" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFF4CE;strokeColor=#F7630C;fontFamily=Segoe UI;fontSize=9;fontColor=#242424;" vertex="1" parent="1">
+          <mxGeometry x="540" y="245" width="185" height="35" as="geometry"/>
+        </mxCell>
+        <mxCell id="dns3" value="privatelink.services&#xa;.ai.azure.com" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFF4CE;strokeColor=#F7630C;fontFamily=Segoe UI;fontSize=9;fontColor=#242424;" vertex="1" parent="1">
+          <mxGeometry x="540" y="290" width="150" height="35" as="geometry"/>
+        </mxCell>
+        <mxCell id="dns4" value="privatelink.search&#xa;.windows.net" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFF4CE;strokeColor=#F7630C;fontFamily=Segoe UI;fontSize=9;fontColor=#242424;" vertex="1" parent="1">
+          <mxGeometry x="540" y="335" width="150" height="35" as="geometry"/>
+        </mxCell>
+        <mxCell id="dns5" value="privatelink.documents&#xa;.azure.com" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFF4CE;strokeColor=#F7630C;fontFamily=Segoe UI;fontSize=9;fontColor=#242424;" vertex="1" parent="1">
+          <mxGeometry x="540" y="380" width="155" height="35" as="geometry"/>
+        </mxCell>
+
+        <!-- NSG -->
+        <mxCell id="nsg" value="NSG Policy&#xa;✗ Deny Internet Egress&#xa;✓ Allow AzureActiveDirectory (service tag)&#xa;✓ Allow VirtualNetwork" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FDE7E9;strokeColor=#D13438;fontFamily=Segoe UI;fontSize=10;fontColor=#242424;fontStyle=1;strokeWidth=2;" vertex="1" parent="1">
+          <mxGeometry x="520" y="490" width="230" height="80" as="geometry"/>
+        </mxCell>
+
+        <!-- ═══════════ External Services (Private Only) ═══════════ -->
+        <mxCell id="ext_box" value="External Services — publicNetworkAccess = DISABLED" style="rounded=1;whiteSpace=wrap;html=1;fillColor=none;strokeColor=#D13438;strokeWidth=3;fontFamily=Segoe UI;fontSize=13;fontStyle=1;fontColor=#D13438;verticalAlign=top;align=center;spacingTop=8;arcSize=4;" vertex="1" parent="1">
+          <mxGeometry x="880" y="100" width="700" height="450" as="geometry"/>
+        </mxCell>
+
+        <!-- Foundry Central US -->
+        <mxCell id="foundry_box" value="Central US" style="rounded=1;whiteSpace=wrap;html=1;fillColor=none;strokeColor=#107C10;strokeWidth=2;fontFamily=Segoe UI;fontSize=11;fontStyle=1;fontColor=#107C10;verticalAlign=top;align=left;spacingLeft=10;spacingTop=5;arcSize=4;" vertex="1" parent="1">
+          <mxGeometry x="920" y="160" width="300" height="340" as="geometry"/>
+        </mxCell>
+        <mxCell id="foundry" value="AI Foundry&#xa;AIServices Account&#xa;+ Agent Service&#xa;publicNetworkAccess = Disabled" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#DFF6DD;strokeColor=#107C10;fontFamily=Segoe UI;fontSize=11;fontColor=#242424;fontStyle=1;strokeWidth=2;" vertex="1" parent="1">
+          <mxGeometry x="960" y="210" width="220" height="75" as="geometry"/>
+        </mxCell>
+        <mxCell id="aoai" value="Azure OpenAI&#xa;Global Standard&#xa;gpt-4o-mini" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#DFF6DD;strokeColor=#107C10;fontFamily=Segoe UI;fontSize=10;fontColor=#242424;" vertex="1" parent="1">
+          <mxGeometry x="960" y="320" width="150" height="55" as="geometry"/>
+        </mxCell>
+        <mxCell id="cosmos_ext" value="Cosmos DB&#xa;(Private)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFF4CE;strokeColor=#F7630C;fontFamily=Segoe UI;fontSize=10;fontColor=#242424;" vertex="1" parent="1">
+          <mxGeometry x="960" y="410" width="120" height="40" as="geometry"/>
+        </mxCell>
+
+        <!-- AI Search East US -->
+        <mxCell id="search_box" value="East US" style="rounded=1;whiteSpace=wrap;html=1;fillColor=none;strokeColor=#5C2D91;strokeWidth=2;fontFamily=Segoe UI;fontSize=11;fontStyle=1;fontColor=#5C2D91;verticalAlign=top;align=left;spacingLeft=10;spacingTop=5;arcSize=4;" vertex="1" parent="1">
+          <mxGeometry x="1280" y="160" width="260" height="340" as="geometry"/>
+        </mxCell>
+        <mxCell id="search" value="Azure AI Search&#xa;Vector + Semantic Index&#xa;publicNetworkAccess = Disabled" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#DFF6DD;strokeColor=#107C10;fontFamily=Segoe UI;fontSize=11;fontColor=#242424;fontStyle=1;strokeWidth=2;" vertex="1" parent="1">
+          <mxGeometry x="1310" y="210" width="210" height="65" as="geometry"/>
+        </mxCell>
+        <mxCell id="blob_ext" value="Blob Storage&#xa;(Document Source)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F3F2F1;strokeColor=#616161;fontFamily=Segoe UI;fontSize=10;fontColor=#242424;" vertex="1" parent="1">
+          <mxGeometry x="1330" y="320" width="140" height="45" as="geometry"/>
+        </mxCell>
+        <mxCell id="indexer_ext" value="AI Search Indexer&#xa;+ Skillset" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#DFF6DD;strokeColor=#107C10;fontFamily=Segoe UI;fontSize=10;fontColor=#242424;" vertex="1" parent="1">
+          <mxGeometry x="1330" y="410" width="140" height="40" as="geometry"/>
+        </mxCell>
+
+        <!-- Entra ID -->
+        <mxCell id="entra" value="Microsoft Entra ID&#xa;Token Endpoint&#xa;(Bearer Auth Only)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#CFE4FA;strokeColor=#0078D4;fontFamily=Segoe UI;fontSize=10;fontColor=#242424;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="520" y="680" width="180" height="55" as="geometry"/>
+        </mxCell>
+
+        <!-- ═══════════ Private Link Connections ═══════════ -->
+        <!-- PE Foundry to Foundry -->
+        <mxCell id="e_pe_foundry" value="Private Link&#xa;(In-Region)" style="edgeStyle=orthogonalEdgeStyle;strokeColor=#5C2D91;strokeWidth=2.5;endArrow=blockThin;endFill=1;fontFamily=Segoe UI;fontSize=9;fontColor=#5C2D91;labelBackgroundColor=#FFFFFF;" edge="1" source="pe_foundry" target="foundry" parent="1">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+
+        <!-- PE Search to Search (cross-region) -->
+        <mxCell id="e_pe_search" value="Private Link&#xa;(CROSS-REGION)" style="edgeStyle=orthogonalEdgeStyle;strokeColor=#D13438;strokeWidth=2.5;endArrow=blockThin;endFill=1;fontFamily=Segoe UI;fontSize=9;fontColor=#D13438;fontStyle=1;labelBackgroundColor=#FFFFFF;" edge="1" source="pe_search" target="search" parent="1">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+
+        <!-- ACA resolves via DNS -->
+        <mxCell id="e_aca_dns" value="Resolves via" style="edgeStyle=orthogonalEdgeStyle;strokeColor=#F7630C;strokeWidth=1.5;endArrow=blockThin;endFill=1;dashed=1;fontFamily=Segoe UI;fontSize=9;fontColor=#F7630C;" edge="1" source="aca" target="dns_box" parent="1">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+
+        <!-- DNS to PEs -->
+        <mxCell id="e_dns_pe_f" value="Private IPs" style="edgeStyle=orthogonalEdgeStyle;strokeColor=#F7630C;strokeWidth=1;endArrow=blockThin;endFill=1;dashed=1;fontFamily=Segoe UI;fontSize=8;fontColor=#F7630C;" edge="1" source="dns_box" target="pe_subnet" parent="1">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+
+        <!-- ACA to Entra -->
+        <mxCell id="e_aca_entra" value="Bearer Token&#xa;(Service Tag Allowed)" style="edgeStyle=orthogonalEdgeStyle;strokeColor=#0078D4;strokeWidth=1.5;endArrow=blockThin;endFill=1;fontFamily=Segoe UI;fontSize=9;fontColor=#0078D4;labelBackgroundColor=#FFFFFF;" edge="1" source="aca" target="entra" parent="1">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+
+        <!-- NSG governs ACA -->
+        <mxCell id="e_nsg_aca" value="Governs" style="edgeStyle=orthogonalEdgeStyle;strokeColor=#D13438;strokeWidth=1.5;endArrow=blockThin;endFill=1;dashed=1;fontFamily=Segoe UI;fontSize=9;fontColor=#D13438;" edge="1" source="nsg" target="compute_subnet" parent="1">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+
+        <!-- Foundry to AOAI -->
+        <mxCell id="e_foundry_aoai" style="edgeStyle=orthogonalEdgeStyle;strokeColor=#107C10;strokeWidth=1.5;endArrow=blockThin;endFill=1;" edge="1" source="foundry" target="aoai" parent="1">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+
+        <!-- Indexer connections -->
+        <mxCell id="e_indexer_blob" style="edgeStyle=orthogonalEdgeStyle;strokeColor=#616161;strokeWidth=1;endArrow=blockThin;endFill=1;" edge="1" source="indexer_ext" target="blob_ext" parent="1">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="e_indexer_search" style="edgeStyle=orthogonalEdgeStyle;strokeColor=#107C10;strokeWidth=1;endArrow=blockThin;endFill=1;" edge="1" source="indexer_ext" target="search" parent="1">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+
+        <!-- ═══════════ Callout: Agent Service Region Note ═══════════ -->
+        <mxCell id="caveat" value="⚠ Agent Service Region Caveat:&#xa;AI Foundry Agent Service is only available in select regions.&#xa;If Central US is not Agent-capable, host Foundry in the nearest&#xa;supported region — cross-region private-link pattern unchanged." style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFF4CE;strokeColor=#F7630C;fontFamily=Segoe UI;fontSize=10;fontColor=#242424;align=left;spacingLeft=8;strokeWidth=2;" vertex="1" parent="1">
+          <mxGeometry x="880" y="590" width="410" height="75" as="geometry"/>
+        </mxCell>
+
+        <!-- ═══════════ Security Summary ═══════════ -->
+        <mxCell id="sec_box" value="" style="rounded=1;whiteSpace=wrap;html=1;fillColor=none;strokeColor=#242424;strokeWidth=1;arcSize=4;" vertex="1" parent="1">
+          <mxGeometry x="880" y="700" width="420" height="80" as="geometry"/>
+        </mxCell>
+        <mxCell id="sec_title" value="Security Posture Summary" style="text;html=1;align=left;verticalAlign=middle;strokeColor=none;fillColor=none;fontFamily=Segoe UI;fontSize=10;fontStyle=1;fontColor=#242424;" vertex="1" parent="1">
+          <mxGeometry x="895" y="703" width="200" height="18" as="geometry"/>
+        </mxCell>
+        <mxCell id="sec_items" value="✓ Zero public internet exposure  ✓ Entra-only auth (disableLocalAuth)&#xa;✓ No keys/secrets cross the wire  ✓ Cross-region via Private Endpoints&#xa;✓ Private DNS for unchanged SDK clients  ✓ In-VNet validation (ACI probe)" style="text;html=1;align=left;verticalAlign=top;strokeColor=none;fillColor=none;fontFamily=Segoe UI;fontSize=9;fontColor=#242424;" vertex="1" parent="1">
+          <mxGeometry x="895" y="722" width="395" height="55" as="geometry"/>
+        </mxCell>
+
+        <!-- ═══════════ Legend ═══════════ -->
+        <mxCell id="legend_box" value="" style="rounded=1;whiteSpace=wrap;html=1;fillColor=none;strokeColor=#242424;strokeWidth=1;arcSize=10;" vertex="1" parent="1">
+          <mxGeometry x="80" y="810" width="250" height="120" as="geometry"/>
+        </mxCell>
+        <mxCell id="legend_title" value="Legend" style="text;html=1;align=left;verticalAlign=middle;strokeColor=none;fillColor=none;fontFamily=Segoe UI;fontSize=10;fontStyle=1;fontColor=#242424;" vertex="1" parent="1">
+          <mxGeometry x="90" y="815" width="60" height="18" as="geometry"/>
+        </mxCell>
+        <mxCell id="l1" value="" style="rounded=1;fillColor=#E8DAEF;strokeColor=#5C2D91;" vertex="1" parent="1">
+          <mxGeometry x="95" y="840" width="14" height="14" as="geometry"/>
+        </mxCell>
+        <mxCell id="l1t" value="Private Endpoints" style="text;html=1;align=left;verticalAlign=middle;strokeColor=none;fillColor=none;fontFamily=Segoe UI;fontSize=9;fontColor=#242424;" vertex="1" parent="1">
+          <mxGeometry x="115" y="838" width="110" height="18" as="geometry"/>
+        </mxCell>
+        <mxCell id="l2" value="" style="rounded=1;fillColor=#DFF6DD;strokeColor=#107C10;" vertex="1" parent="1">
+          <mxGeometry x="95" y="860" width="14" height="14" as="geometry"/>
+        </mxCell>
+        <mxCell id="l2t" value="AI Services (Private)" style="text;html=1;align=left;verticalAlign=middle;strokeColor=none;fillColor=none;fontFamily=Segoe UI;fontSize=9;fontColor=#242424;" vertex="1" parent="1">
+          <mxGeometry x="115" y="858" width="120" height="18" as="geometry"/>
+        </mxCell>
+        <mxCell id="l3" value="" style="rounded=1;fillColor=#FFF4CE;strokeColor=#F7630C;" vertex="1" parent="1">
+          <mxGeometry x="95" y="880" width="14" height="14" as="geometry"/>
+        </mxCell>
+        <mxCell id="l3t" value="DNS / Operations" style="text;html=1;align=left;verticalAlign=middle;strokeColor=none;fillColor=none;fontFamily=Segoe UI;fontSize=9;fontColor=#242424;" vertex="1" parent="1">
+          <mxGeometry x="115" y="878" width="110" height="18" as="geometry"/>
+        </mxCell>
+        <mxCell id="l4" value="" style="rounded=1;fillColor=#FDE7E9;strokeColor=#D13438;" vertex="1" parent="1">
+          <mxGeometry x="95" y="900" width="14" height="14" as="geometry"/>
+        </mxCell>
+        <mxCell id="l4t" value="Security Boundary / NSG" style="text;html=1;align=left;verticalAlign=middle;strokeColor=none;fillColor=none;fontFamily=Segoe UI;fontSize=9;fontColor=#242424;" vertex="1" parent="1">
+          <mxGeometry x="115" y="898" width="150" height="18" as="geometry"/>
+        </mxCell>
+        <mxCell id="l5" value="" style="rounded=1;fillColor=#CFE4FA;strokeColor=#0078D4;" vertex="1" parent="1">
+          <mxGeometry x="95" y="920" width="14" height="14" as="geometry"/>
+        </mxCell>
+        <mxCell id="l5t" value="Compute / Identity" style="text;html=1;align=left;verticalAlign=middle;strokeColor=none;fillColor=none;fontFamily=Segoe UI;fontSize=9;fontColor=#242424;" vertex="1" parent="1">
+          <mxGeometry x="115" y="918" width="120" height="18" as="geometry"/>
+        </mxCell>
+
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

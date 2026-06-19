@@ -1,0 +1,151 @@
+<mxfile host="app.diagrams.net" agent="askmaya-azure-redesign" type="device">
+  <diagram name="Ask Maya — Solution Architecture" id="askmaya-arch-1">
+    <mxGraphModel dx="1400" dy="900" grid="0" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1720" pageHeight="1180" math="0" shadow="0" background="#0d1117">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+
+        <!-- ===================== Title ===================== -->
+        <mxCell id="title" value="Ask Maya — Azure RAG Architecture (deployed: rg-askmaya-dev · canadacentral)" style="text;html=1;fontColor=#e6edf3;fontSize=22;fontStyle=1;align=left;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="40" y="20" width="1200" height="34" as="geometry" />
+        </mxCell>
+        <mxCell id="subtitle" value="Entra-only auth (no keys) · managed identity everywhere · serverless / scale-to-zero where possible" style="text;html=1;fontColor=#7d8590;fontSize=13;align=left;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="40" y="54" width="1200" height="24" as="geometry" />
+        </mxCell>
+
+        <!-- ===================== Legend ===================== -->
+        <mxCell id="legend" value="LEGEND" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#161b22;strokeColor=#30363d;fontColor=#7d8590;fontSize=11;fontStyle=1;align=left;verticalAlign=top;spacingLeft=8;spacingTop=6;" vertex="1" parent="1">
+          <mxGeometry x="1360" y="92" width="320" height="170" as="geometry" />
+        </mxCell>
+        <mxCell id="legUser" value="Client / Edge" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#1f6feb;strokeColor=#388bfd;fontColor=#ffffff;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="1376" y="120" width="120" height="26" as="geometry" />
+        </mxCell>
+        <mxCell id="legApp" value="Compute (Container Apps)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#238636;strokeColor=#2ea043;fontColor=#ffffff;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="1376" y="152" width="170" height="26" as="geometry" />
+        </mxCell>
+        <mxCell id="legAI" value="AI / Retrieval" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#bd561d;strokeColor=#db6d28;fontColor=#ffffff;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="1556" y="120" width="110" height="26" as="geometry" />
+        </mxCell>
+        <mxCell id="legData" value="Data / State" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#8957e5;strokeColor=#a371f7;fontColor=#ffffff;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="1556" y="152" width="110" height="26" as="geometry" />
+        </mxCell>
+        <mxCell id="legSec" value="Identity / Security" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#da3633;strokeColor=#f85149;fontColor=#ffffff;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="1376" y="184" width="170" height="26" as="geometry" />
+        </mxCell>
+        <mxCell id="legObs" value="Observability" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#9e6a03;strokeColor=#d29922;fontColor=#ffffff;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="1556" y="184" width="110" height="26" as="geometry" />
+        </mxCell>
+        <mxCell id="legEdgeMI" value="— · — managed-identity (Entra) auth&#10;———— request / data flow" style="text;html=1;fontColor=#7d8590;fontSize=10;align=left;verticalAlign=top;" vertex="1" parent="1">
+          <mxGeometry x="1376" y="216" width="300" height="40" as="geometry" />
+        </mxCell>
+
+        <!-- ===================== Client tier ===================== -->
+        <mxCell id="user" value="&lt;b&gt;End User&lt;/b&gt;&lt;br&gt;&lt;font color=#cfe3ff size=1&gt;Browser over HTTPS&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#1f6feb;strokeColor=#388bfd;fontColor=#ffffff;fontSize=13;" vertex="1" parent="1">
+          <mxGeometry x="360" y="100" width="240" height="56" as="geometry" />
+        </mxCell>
+        <mxCell id="fd" value="&lt;b&gt;Azure Front Door (optional)&lt;/b&gt;&lt;br&gt;&lt;font color=#cfe3ff size=1&gt;Why: global entry, TLS, WAF, failover.&lt;br&gt;Off by default (deployFrontDoor=false).&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;dashed=1;fillColor=#1f6feb;strokeColor=#388bfd;fontColor=#ffffff;fontSize=12;opacity=70;" vertex="1" parent="1">
+          <mxGeometry x="320" y="190" width="320" height="60" as="geometry" />
+        </mxCell>
+
+        <!-- ===================== Presentation tier (Web) ===================== -->
+        <mxCell id="web" value="&lt;b&gt;Web — Blazor Server&lt;/b&gt;  (Container App · azweb…)&#10;&lt;font color=#bdf0c2 size=1&gt;Why: stateful UI over a SignalR circuit; sticky sessions + min 1 replica keep a&#10;conversation pinned to one replica. Runs as a container because App Service (B1/F1)&#10;is blocked by this subscription's zero-VM quota.&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#238636;strokeColor=#2ea043;fontColor=#ffffff;fontSize=13;fontStyle=1;align=center;verticalAlign=top;spacingTop=8;" vertex="1" parent="1">
+          <mxGeometry x="240" y="290" width="480" height="120" as="geometry" />
+        </mxCell>
+        <mxCell id="webGuards" value="&lt;b&gt;UI guard rails&lt;/b&gt;&#10;• Summary mode only at launch (Precise hidden via /config flag)&#10;• 500-char maxlength + live counter&#10;• 5-question cap → ‘New thread’ reset&#10;• High-load: input grayed out + ‘try later’ banner" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#0f2a17;strokeColor=#2ea043;fontColor=#bdf0c2;fontSize=11;align=left;verticalAlign=top;spacingLeft=8;spacingTop=6;dashed=1;" vertex="1" parent="1">
+          <mxGeometry x="260" y="320" width="440" height="78" as="geometry" />
+        </mxCell>
+
+        <!-- ===================== API tier ===================== -->
+        <mxCell id="api" value="&lt;b&gt;Chat API — FastAPI&lt;/b&gt;  (Container App · azca…)&#10;&lt;font color=#bdf0c2 size=1&gt;Why: SSE token streaming, RAG orchestration, server-side conversation memory&#10;via Responses API previous_response_id. Consumption scale (0→N) = pay per use.&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#238636;strokeColor=#2ea043;fontColor=#ffffff;fontSize=13;fontStyle=1;align=center;verticalAlign=top;spacingTop=8;" vertex="1" parent="1">
+          <mxGeometry x="200" y="470" width="560" height="190" as="geometry" />
+        </mxCell>
+        <mxCell id="apiGuards" value="&lt;b&gt;Server guard rails (authoritative)&lt;/b&gt;&#10;• /config = single source of truth for limits + feature flags&#10;• char cap + per-thread cap enforced server-side (limit event)&#10;• mode enforcement: precise→summary fallback while flag off&#10;• precise + no grounding ⇒ deterministic refusal (0 model tokens)&#10;• 429 detection on embed + chat ⇒ ‘busy’ event (high-load)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#0f2a17;strokeColor=#2ea043;fontColor=#bdf0c2;fontSize=11;align=left;verticalAlign=top;spacingLeft=8;spacingTop=6;dashed=1;" vertex="1" parent="1">
+          <mxGeometry x="216" y="508" width="320" height="138" as="geometry" />
+        </mxCell>
+        <mxCell id="apiCost" value="&lt;b&gt;Cost guard rails&lt;/b&gt;&#10;• Semantic + exact cache&#10;  (hit ⇒ 0 chat tokens)&#10;• Prompt caching via stable&#10;  per-mode instruction prefix&#10;• previous_response_id ⇒ flat&#10;  token cost as chat grows" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#0f2a17;strokeColor=#2ea043;fontColor=#bdf0c2;fontSize=11;align=left;verticalAlign=top;spacingLeft=8;spacingTop=6;dashed=1;" vertex="1" parent="1">
+          <mxGeometry x="548" y="508" width="196" height="138" as="geometry" />
+        </mxCell>
+
+        <!-- ===================== AI / Retrieval tier ===================== -->
+        <mxCell id="aoai" value="&lt;b&gt;Azure OpenAI&lt;/b&gt;  (azcog…)&#10;&lt;font color=#ffd9bf size=1&gt;• gpt-5.4-mini → chat / synthesis&#10;• text-embedding-3-small → 1536-dim vectors&#10;Why: managed, scalable inference; disableLocalAuth=true&#10;(Entra-only). gpt-4o-mini has no quota on this sub.&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#bd561d;strokeColor=#db6d28;fontColor=#ffffff;fontSize=13;fontStyle=1;align=center;verticalAlign=top;spacingTop=8;" vertex="1" parent="1">
+          <mxGeometry x="80" y="730" width="360" height="130" as="geometry" />
+        </mxCell>
+        <mxCell id="search" value="&lt;b&gt;Azure AI Search&lt;/b&gt;  (azsrch… · Basic)&#10;&lt;font color=#ffd9bf size=1&gt;Why: hybrid (keyword + vector) retrieval with integrated&#10;vectorization. Basic ≈ 15 GB storage fits the 10 GB start;&#10;bump to Standard (S1) if vector quota is exceeded.&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#bd561d;strokeColor=#db6d28;fontColor=#ffffff;fontSize=13;fontStyle=1;align=center;verticalAlign=top;spacingTop=8;" vertex="1" parent="1">
+          <mxGeometry x="470" y="730" width="370" height="130" as="geometry" />
+        </mxCell>
+
+        <!-- ===================== Data tier ===================== -->
+        <mxCell id="cosmos" value="&lt;b&gt;Cosmos DB (serverless)&lt;/b&gt;  (azcosmos…)&#10;&lt;font color=#e9ddff size=1&gt;Why: per-session chat turns + state (previous_response_id).&#10;Powers the 5-question count. Serverless = pay-per-RU.&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#8957e5;strokeColor=#a371f7;fontColor=#ffffff;fontSize=13;fontStyle=1;align=center;verticalAlign=top;spacingTop=8;" vertex="1" parent="1">
+          <mxGeometry x="80" y="900" width="360" height="100" as="geometry" />
+        </mxCell>
+        <mxCell id="storage" value="&lt;b&gt;Blob Storage&lt;/b&gt;  (azst…)&#10;&lt;font color=#e9ddff size=1&gt;Why: source document corpus that the Search indexer&#10;pulls, chunks &amp; vectorizes. Entra-only data plane.&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#8957e5;strokeColor=#a371f7;fontColor=#ffffff;fontSize=13;fontStyle=1;align=center;verticalAlign=top;spacingTop=8;" vertex="1" parent="1">
+          <mxGeometry x="470" y="900" width="370" height="100" as="geometry" />
+        </mxCell>
+
+        <!-- ===================== Identity / Security column ===================== -->
+        <mxCell id="mi" value="&lt;b&gt;User-Assigned Managed Identity&lt;/b&gt;&#10;&lt;font color=#ffd1cf size=1&gt;Why: one Entra identity for both containers. RBAC to AOAI,&#10;Search, Cosmos, Storage, ACR — no keys/secrets in app.&#10;Note: SP data-plane is blocked tenant-wide; MI is required.&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#da3633;strokeColor=#f85149;fontColor=#ffffff;fontSize=12;fontStyle=1;align=center;verticalAlign=top;spacingTop=8;" vertex="1" parent="1">
+          <mxGeometry x="900" y="470" width="360" height="110" as="geometry" />
+        </mxCell>
+        <mxCell id="kv" value="&lt;b&gt;Key Vault&lt;/b&gt;  (azkv…)&#10;&lt;font color=#ffd1cf size=1&gt;Why: vault for any future secrets/certs; RBAC-gated.&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#da3633;strokeColor=#f85149;fontColor=#ffffff;fontSize=12;fontStyle=1;align=center;verticalAlign=top;spacingTop=8;" vertex="1" parent="1">
+          <mxGeometry x="900" y="600" width="360" height="64" as="geometry" />
+        </mxCell>
+        <mxCell id="acr" value="&lt;b&gt;Container Registry&lt;/b&gt;  (azcr…)&#10;&lt;font color=#ffd1cf size=1&gt;Why: stores API + Web images; AcrPull via MI. Remote&#10;build (no local Docker needed).&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#da3633;strokeColor=#f85149;fontColor=#ffffff;fontSize=12;fontStyle=1;align=center;verticalAlign=top;spacingTop=8;" vertex="1" parent="1">
+          <mxGeometry x="900" y="684" width="360" height="76" as="geometry" />
+        </mxCell>
+
+        <!-- ===================== Observability ===================== -->
+        <mxCell id="obs" value="&lt;b&gt;App Insights + Log Analytics&lt;/b&gt;  (azappi… / azlog…)&#10;&lt;font color=#ffeec2 size=1&gt;Why: distributed traces, request/error telemetry and container&#10;console logs for both apps — the basis for the high-load (429) signal&#10;and production troubleshooting.&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#9e6a03;strokeColor=#d29922;fontColor=#ffffff;fontSize=12;fontStyle=1;align=center;verticalAlign=top;spacingTop=8;" vertex="1" parent="1">
+          <mxGeometry x="900" y="790" width="360" height="110" as="geometry" />
+        </mxCell>
+
+        <!-- ===================== Optional governance ===================== -->
+        <mxCell id="apim" value="&lt;b&gt;APIM + Service Bus (optional)&lt;/b&gt;&#10;&lt;font color=#cfe3ff size=1&gt;Why: gateway token-rate cap / async ingestion. Off by default&#10;(deployApim / deployServiceBus = false) to keep dev cheap.&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;dashed=1;fillColor=#1f6feb;strokeColor=#388bfd;fontColor=#ffffff;fontSize=12;opacity=70;align=center;verticalAlign=top;spacingTop=8;" vertex="1" parent="1">
+          <mxGeometry x="900" y="100" width="360" height="90" as="geometry" />
+        </mxCell>
+
+        <!-- ===================== Flow edges ===================== -->
+        <mxCell id="e_user_fd" style="endArrow=block;html=1;strokeColor=#58a6ff;strokeWidth=2;dashed=1;" edge="1" parent="1" source="user" target="fd">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_fd_web" style="endArrow=block;html=1;strokeColor=#58a6ff;strokeWidth=2;" edge="1" parent="1" source="fd" target="web">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_web_api" value="HTTPS / SSE" style="endArrow=block;html=1;strokeColor=#58a6ff;strokeWidth=2;fontColor=#9fb6cc;fontSize=11;" edge="1" parent="1" source="web" target="api">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_api_aoai" value="embed + chat" style="endArrow=block;html=1;strokeColor=#db6d28;strokeWidth=2;fontColor=#e3a06a;fontSize=11;" edge="1" parent="1" source="api" target="aoai">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_api_search" value="hybrid retrieve" style="endArrow=block;html=1;strokeColor=#db6d28;strokeWidth=2;fontColor=#e3a06a;fontSize=11;" edge="1" parent="1" source="api" target="search">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_api_cosmos" value="history / count" style="endArrow=block;html=1;strokeColor=#a371f7;strokeWidth=2;fontColor=#c0a3f0;fontSize=11;" edge="1" parent="1" source="api" target="cosmos">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_search_storage" value="indexer pulls docs" style="endArrow=block;html=1;strokeColor=#a371f7;strokeWidth=2;fontColor=#c0a3f0;fontSize=11;" edge="1" parent="1" source="search" target="storage">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_search_aoai" value="integrated&#10;vectorization" style="endArrow=block;html=1;strokeColor=#db6d28;strokeWidth=1;dashed=1;fontColor=#e3a06a;fontSize=10;" edge="1" parent="1" source="search" target="aoai">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- ===================== Managed-identity auth edges (dashed) ===================== -->
+        <mxCell id="e_mi_api" style="endArrow=none;html=1;strokeColor=#f85149;strokeWidth=1;dashed=1;dashPattern=6 6;" edge="1" parent="1" source="mi" target="api">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_mi_web" style="endArrow=none;html=1;strokeColor=#f85149;strokeWidth=1;dashed=1;dashPattern=6 6;" edge="1" parent="1" source="mi" target="web">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_mi_acr" style="endArrow=none;html=1;strokeColor=#f85149;strokeWidth=1;dashed=1;dashPattern=6 6;" edge="1" parent="1" source="mi" target="acr">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_mi_kv" style="endArrow=none;html=1;strokeColor=#f85149;strokeWidth=1;dashed=1;dashPattern=6 6;" edge="1" parent="1" source="mi" target="kv">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_api_obs" value="telemetry" style="endArrow=block;html=1;strokeColor=#d29922;strokeWidth=1;dashed=1;fontColor=#e3c878;fontSize=10;" edge="1" parent="1" source="api" target="obs">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

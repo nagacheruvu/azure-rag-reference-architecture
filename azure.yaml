@@ -1,0 +1,26 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/Azure/azure-dev/main/schemas/v1.0/azure.yaml.json
+name: askmaya-azure-redesign
+metadata:
+  template: askmaya-azure-redesign@1.0.0
+
+# One template, every environment. Tier sizes are parameterized in
+# infra/main.parameters.json so dev runs cheap (serverless / scale-to-zero)
+# and the same template scales up for a load test.
+infra:
+  provider: bicep
+  path: infra
+  module: main
+
+services:
+  api:
+    project: ./src/api
+    language: py
+    host: containerapp
+    docker:
+      remoteBuild: true
+  web:
+    project: ./src/web
+    language: dotnet
+    host: containerapp
+    docker:
+      remoteBuild: true

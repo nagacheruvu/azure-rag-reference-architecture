@@ -1,0 +1,26 @@
+%% Pattern 2 — Foundry + AI Search across regions inside ONE Network Security Perimeter (NSP)
+%% Public endpoints kept; access governed by perimeter rules. Maps to infra/nsp/.
+flowchart TB
+    Client([Approved client<br/>CIDR allow-list])
+
+    subgraph NSP[Network Security Perimeter - one profile, cross-region trust]
+      direction TB
+      subgraph RA[Region A - e.g. eastus]
+        FDY[AI Foundry / AIServices<br/>account + Agent]
+        AOAI[Azure OpenAI deployments]
+      end
+      subgraph RB[Region B - e.g. westus2]
+        SR[(Azure AI Search<br/>vector + semantic)]
+      end
+      FDY <-->|intra-perimeter<br/>allowed by association| SR
+      FDY --> AOAI
+    end
+
+    LAW[Log Analytics<br/>NspAccessLogs - allow/deny]
+
+    Client -->|inbound IP rule| FDY
+    NSP -.->|access logs| LAW
+
+    classDef mode fill:#0d3b66,stroke:#7fb2e5,color:#fff
+    M[[Access mode:<br/>Learning -> Audit -> Enforced]]:::mode
+    M -.-> NSP

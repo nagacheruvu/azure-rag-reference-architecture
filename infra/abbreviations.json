@@ -1,0 +1,17 @@
+{
+  "abbrs": {
+    "appContainerApps": "ca",
+    "appManagedEnvironments": "cae",
+    "containerRegistry": "cr",
+    "cognitiveServices": "cog",
+    "cosmosDb": "cosmos",
+    "appConfiguration": "appcs",
+    "keyVault": "kv",
+    "searchService": "srch",
+    "storageAccount": "st",
+    "logAnalytics": "log",
+    "appInsights": "appi",
+    "managedIdentity": "id",
+    "staticWebApp": "stapp"
+  }
+}

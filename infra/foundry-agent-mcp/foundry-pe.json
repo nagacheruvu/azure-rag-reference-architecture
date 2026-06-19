@@ -1,0 +1,90 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+  "contentVersion": "1.0.0.0",
+  "metadata": {
+    "_generator": {
+      "name": "bicep",
+      "version": "0.42.1.51946",
+      "templateHash": "4155026488106602927"
+    }
+  },
+  "parameters": {
+    "accountName": {
+      "type": "string",
+      "metadata": {
+        "description": "Existing Foundry (AIServices) account name."
+      }
+    },
+    "peSubnetId": {
+      "type": "string",
+      "metadata": {
+        "description": "Resource id of the private-endpoint subnet (snet-pe in the agent VNet)."
+      }
+    },
+    "token": {
+      "type": "string",
+      "metadata": {
+        "description": "Short token used in the resource names (matches main.bicep)."
+      }
+    }
+  },
+  "variables": {
+    "dnsOpenAi": "privatelink.openai.azure.com",
+    "dnsCognitive": "privatelink.cognitiveservices.azure.com",
+    "dnsServicesAi": "privatelink.services.ai.azure.com"
+  },
+  "resources": [
+    {
+      "type": "Microsoft.Network/privateEndpoints",
+      "apiVersion": "2024-05-01",
+      "name": "[format('pe-foundry-{0}', parameters('token'))]",
+      "location": "[resourceGroup().location]",
+      "properties": {
+        "subnet": {
+          "id": "[parameters('peSubnetId')]"
+        },
+        "privateLinkServiceConnections": [
+          {
+            "name": "[format('pe-foundry-{0}', parameters('token'))]",
+            "properties": {
+              "privateLinkServiceId": "[resourceId('Microsoft.CognitiveServices/accounts', parameters('accountName'))]",
+              "groupIds": [
+                "account"
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "type": "Microsoft.Network/privateEndpoints/privateDnsZoneGroups",
+      "apiVersion": "2024-05-01",
+      "name": "[format('{0}/{1}', format('pe-foundry-{0}', parameters('token')), 'default')]",
+      "properties": {
+        "privateDnsZoneConfigs": [
+          {
+            "name": "openai",
+            "properties": {
+              "privateDnsZoneId": "[resourceId('Microsoft.Network/privateDnsZones', variables('dnsOpenAi'))]"
+            }
+          },
+          {
+            "name": "cognitive",
+            "properties": {
+              "privateDnsZoneId": "[resourceId('Microsoft.Network/privateDnsZones', variables('dnsCognitive'))]"
+            }
+          },
+          {
+            "name": "servicesai",
+            "properties": {
+              "privateDnsZoneId": "[resourceId('Microsoft.Network/privateDnsZones', variables('dnsServicesAi'))]"
+            }
+          }
+        ]
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Network/privateEndpoints', format('pe-foundry-{0}', parameters('token')))]"
+      ]
+    }
+  ]
+}

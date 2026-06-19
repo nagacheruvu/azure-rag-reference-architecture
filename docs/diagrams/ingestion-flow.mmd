@@ -1,0 +1,11 @@
+flowchart LR
+    BLOB[(Blob Storage<br/>document landing zone)]
+    EVT{{Blob event / schedule}}
+    DOCINT[Document Intelligence<br/>parse / OCR / tables]
+    SKILL[AI Search skillset<br/>chunk + integrated vectorization]
+    AOAI[AOAI embedding model]
+    IDX[(AI Search index<br/>vectors + metadata)]
+
+    BLOB --> EVT --> DOCINT --> SKILL --> IDX
+    SKILL -. embed .-> AOAI
+    AOAI -. vectors .-> SKILL

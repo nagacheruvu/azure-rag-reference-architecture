@@ -1,0 +1,45 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentParameters.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "environmentName": {
+      "value": "${AZURE_ENV_NAME}"
+    },
+    "location": {
+      "value": "${AZURE_LOCATION}"
+    },
+    "principalId": {
+      "value": "${AZURE_PRINCIPAL_ID}"
+    },
+    "isProduction": {
+      "value": false
+    },
+    "deployServiceBus": {
+      "value": false
+    },
+    "deployApim": {
+      "value": false
+    },
+    "deployMultiRegion": {
+      "value": "${DEPLOY_MULTI_REGION=false}"
+    },
+    "apimSkuName": {
+      "value": "Developer"
+    },
+    "secondaryLocation": {
+      "value": "eastus2"
+    },
+    "apimPublisherEmail": {
+      "value": "admin@example.com"
+    },
+    "deployFrontDoor": {
+      "value": false
+    },
+    "frontDoorSkuName": {
+      "value": "Standard_AzureFrontDoor"
+    },
+    "searchSkuName": {
+      "value": "basic"
+    }
+  }
+}

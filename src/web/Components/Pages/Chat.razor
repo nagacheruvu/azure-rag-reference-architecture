@@ -1,0 +1,335 @@
+@page "/"
+@rendermode InteractiveServer
+@using Markdig
+@inject ChatClient ChatApi
+@implements IDisposable
+
+<PageTitle>Ask Maya</PageTitle>
+
+<div class="beta-banner">
+    This app is a beta test for invited users only. All answers should be checked with Maya sources.
+    By using this app, you agree to the <a href="#">terms of use</a>.
+</div>
+
+<div class="shell @(_navCollapsed ? "nav-collapsed" : "")">
+    <!-- Left sidebar -->
+    <aside class="sidebar">
+        <button class="collapse" title="Collapse" @onclick="ToggleNav">@(_navCollapsed ? "→" : "←")</button>
+
+        <button class="new-question" @onclick="NewThread">
+            <span class="plus">⊕</span> New Question
+        </button>
+
+        <div class="recent">
+            <div class="recent-title">Recent Questions</div>
+            @if (_recentQuestions.Count == 0)
+            {
+                <div class="recent-empty">No questions yet</div>
+            }
+            else
+            {
+                <div class="recent-group">Today</div>
+                @foreach (var q in _recentQuestions)
+                {
+                    <button class="recent-item" title="@q" @onclick="() => AskQuestion(q)">
+                        ▢ @Truncate(q, 24)
+                    </button>
+                }
+            }
+        </div>
+
+        <button class="feedback">⊞ Send Feedback</button>
+    </aside>
+
+    <!-- Main area -->
+    <main class="main">
+        @if (_messages.Count == 0)
+        {
+            <div class="landing">
+                <div class="brand">
+                    <span class="brand-ask">Ask</span><span class="brand-name">Maya</span>
+                    <sup class="brand-beta">BETA</sup>
+                </div>
+                <p class="brand-tagline">AI Answers, Powered by Maya</p>
+
+                <div class="recommended">
+                    <div class="recommended-label">Recommended Based on Your Activities</div>
+                    <div class="cards">
+                        @foreach (var rec in _recommended)
+                        {
+                            <button class="card" @onclick="() => AskQuestion(rec)">@rec</button>
+                        }
+                    </div>
+                </div>
+            </div>
+        }
+        else
+        {
+            <div class="chat">
+                @foreach (var m in _messages)
+                {
+                    <div class="bubble @(m.Role)">
+                        @if (m.Role == "assistant")
+                        {
+                            @if (string.IsNullOrEmpty(m.Content) && _busy)
+                            {
+                                <div class="content typing"><span></span><span></span><span></span></div>
+                            }
+                            else
+                            {
+                                <div class="content markdown">@RenderMarkdown(m.Content)</div>
+                            }
+                        }
+                        else
+                        {
+                            <div class="content">@m.Content</div>
+                        }
+                        @if (!string.IsNullOrEmpty(m.Cache))
+                        {
+                            <div class="meta cache">
+                                ⚡ cached answer (@m.Cache@(m.Score is { } sc ? $" · {sc * 100:0.0}%" : "")) — no model tokens spent
+                            </div>
+                        }
+                        @if (m.Sources.Count > 0)
+                        {
+                            <div class="meta sources">
+                                Sources: @string.Join("  ", m.Sources.Select(s => $"[{s.Id}] {s.Title}"))
+                            </div>
+                        }
+                    </div>
+                }
+            </div>
+        }
+
+        @if (_throttled)
+        {
+            <div class="banner busy">
+                @_busyMessage
+                <button class="ghost" @onclick="() => _throttled = false">Try again</button>
+            </div>
+        }
+        else if (_questionCount >= _maxQuestions)
+        {
+            <div class="banner">
+                You've reached the @_maxQuestions-question limit for this thread.
+                <button class="ghost" @onclick="NewThread">Start a new thread</button>
+            </div>
+        }
+
+        <!-- Composer -->
+        <div class="composer">
+            <div class="composer-box">
+                <div class="composer-top">
+                    <textarea @bind="_input" @bind:event="oninput" @onkeydown="OnKeyDown"
+                              maxlength="@_maxChars" disabled="@InputDisabled"
+                              placeholder="@(InputDisabled ? "Input unavailable — see message above" : "Ask your question about Maya research")"></textarea>
+                    <button class="send" @onclick="Send" disabled="@(InputDisabled || _busy)" title="Send">@(_busy ? "…" : "▷")</button>
+                </div>
+                <div class="composer-bottom">
+                    <div class="modes">
+                        @if (_preciseEnabled)
+                        {
+                            <button class="mode-btn @(_mode == "precise" ? "active" : "")" @onclick='() => SetMode("precise")'>Precise Mode</button>
+                        }
+                        else
+                        {
+                            <button class="mode-btn disabled" disabled title="Precise mode is not available yet">Precise Mode</button>
+                        }
+                        <button class="mode-btn @(_mode == "summary" ? "active" : "")" @onclick='() => SetMode("summary")'>Summary Mode</button>
+                    </div>
+                    <div class="composer-meta">
+                        <span class="qcount">@(_maxQuestions - _questionCount)/@_maxQuestions questions <span class="info" title="@($"You can ask up to {_maxQuestions} questions per thread.")">ⓘ</span></span>
+                        <span class="counter @(_input.Length >= _maxChars ? "max" : "")">@_input.Length/@_maxChars</span>
+                    </div>
+                </div>
+            </div>
+            <p class="disclaimer">
+                Ask Maya can make mistakes. Generative answers should be checked against their Maya sources.
+                Ask Maya answers cannot be quoted. Maya does not endorse any provider, product, or service.
+            </p>
+        </div>
+    </main>
+</div>
+
+@code {
+    private sealed class Message
+    {
+        public string Role { get; init; } = "assistant";
+        public string Content { get; set; } = "";
+        public string? Cache { get; set; }
+        public double? Score { get; set; }
+        public IReadOnlyList<Source> Sources { get; set; } = Array.Empty<Source>();
+    }
+
+    private readonly List<Message> _messages = new();
+    private readonly List<string> _recentQuestions = new();
+    private string _input = "";
+    private bool _busy;
+    private bool _navCollapsed;
+    private string? _sessionId;
+    private CancellationTokenSource? _cts;
+
+    // Maya-branded recommended starters shown on the landing screen.
+    private readonly string[] _recommended =
+    {
+        "How does increasing talent density benefit software engineering organizations?",
+        "How can ethical AI practices enhance adaptive user experiences?",
+        "How do AI-augmented UX tools complement human UX expertise?",
+    };
+
+    // Modes & limits (hydrated from the API's /config so the API stays the single source of truth).
+    private string _mode = "summary";
+    private bool _preciseEnabled;
+    private int _maxQuestions = 5;
+    private int _maxChars = 500;
+    private int _questionCount;
+
+    // High-load state: when set, the input is grayed out and the user is asked to return later.
+    private bool _throttled;
+    private string _busyMessage = "Ask Maya is experiencing high demand. Please try again in a few minutes.";
+
+    // Input is unavailable while a request is in flight, under high load, or at the thread cap.
+    private bool InputDisabled => _busy || _throttled || _questionCount >= _maxQuestions;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var config = await ChatApi.GetConfigAsync();
+        _preciseEnabled = config.PreciseModeEnabled;
+        _maxQuestions = config.MaxQuestionsPerThread;
+        _maxChars = config.MaxQuestionChars;
+    }
+
+    private void ToggleNav() => _navCollapsed = !_navCollapsed;
+
+    // Markdown pipeline with raw inline/block HTML disabled, so model output can never inject
+    // <script>/markup into the Blazor circuit. Auto-links bare URLs and supports lists/bold/etc.
+    private static readonly MarkdownPipeline MarkdownPipeline =
+        new MarkdownPipelineBuilder()
+            .DisableHtml()
+            .UseAutoLinks()
+            .UseSoftlineBreakAsHardlineBreak()
+            .Build();
+
+    private static MarkupString RenderMarkdown(string text) =>
+        new(Markdown.ToHtml(text ?? "", MarkdownPipeline));
+
+    private static string Truncate(string s, int max) =>
+        s.Length <= max ? s : s[..max].TrimEnd() + "\u2026";
+
+    private void SetMode(string mode)
+    {
+        if (mode == "precise" && !_preciseEnabled)
+        {
+            return;
+        }
+        _mode = mode;
+    }
+
+    private void NewThread()
+    {
+        _cts?.Cancel();
+        _messages.Clear();
+        _sessionId = null;
+        _questionCount = 0;
+        _throttled = false;
+        _input = "";
+    }
+
+    // Used by recommended cards and recent-question items: load the text and send it.
+    private async Task AskQuestion(string question)
+    {
+        if (InputDisabled)
+        {
+            return;
+        }
+        _input = question;
+        await Send();
+    }
+
+    private async Task OnKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter" && !e.ShiftKey)
+        {
+            await Send();
+        }
+    }
+
+    private async Task Send()
+    {
+        var text = _input.Trim();
+        if (string.IsNullOrEmpty(text) || InputDisabled)
+        {
+            return;
+        }
+        if (text.Length > _maxChars)
+        {
+            text = text[.._maxChars];
+        }
+
+        _input = "";
+        _busy = true;
+        _questionCount++;
+        if (!_recentQuestions.Contains(text))
+        {
+            _recentQuestions.Insert(0, text);
+        }
+        _messages.Add(new Message { Role = "user", Content = text });
+        var assistant = new Message { Role = "assistant" };
+        _messages.Add(assistant);
+        StateHasChanged();
+
+        _cts = new CancellationTokenSource();
+        var callbacks = new ChatCallbacks(
+            OnSession: id => InvokeAsync(() => { _sessionId = id; }),
+            OnSources: src => InvokeAsync(() => { assistant.Sources = src; StateHasChanged(); }),
+            OnToken: tok => InvokeAsync(() => { assistant.Content += tok; StateHasChanged(); }),
+            OnDone: done => InvokeAsync(() =>
+            {
+                assistant.Cache = done.Cache;
+                assistant.Score = done.Score;
+                if (done.Sources.Count > 0)
+                {
+                    assistant.Sources = done.Sources;
+                }
+                StateHasChanged();
+            }),
+            OnError: msg => InvokeAsync(() =>
+            {
+                if (string.IsNullOrEmpty(assistant.Content))
+                {
+                    assistant.Content = $"⚠️ {msg}";
+                }
+                StateHasChanged();
+            }),
+            OnBusy: msg => InvokeAsync(() =>
+            {
+                _throttled = true;
+                _busyMessage = msg;
+                // This turn didn't complete, so it doesn't count against the thread cap.
+                _questionCount = Math.Max(0, _questionCount - 1);
+                _messages.Remove(assistant);
+                StateHasChanged();
+            }),
+            OnLimit: msg => InvokeAsync(() =>
+            {
+                assistant.Content = msg;
+                StateHasChanged();
+            }));
+
+        try
+        {
+            await ChatApi.StreamAsync(text, _sessionId, _mode, callbacks, _cts.Token);
+        }
+        catch (Exception ex)
+        {
+            assistant.Content = string.IsNullOrEmpty(assistant.Content) ? $"⚠️ {ex.Message}" : assistant.Content;
+        }
+        finally
+        {
+            _busy = false;
+            StateHasChanged();
+        }
+    }
+
+    public void Dispose() => _cts?.Cancel();
+}

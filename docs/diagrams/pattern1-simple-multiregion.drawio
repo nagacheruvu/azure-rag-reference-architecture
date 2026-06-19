@@ -1,0 +1,184 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mxfile host="app.diagrams.net" modified="2026-06-28" type="device">
+  <diagram id="pattern1" name="Pattern 1 - Simple &amp; Scalable Multi-Region">
+    <mxGraphModel dx="1800" dy="1200" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1600" pageHeight="1100" math="0" shadow="0">
+      <root>
+        <mxCell id="0"/>
+        <mxCell id="1" parent="0"/>
+
+        <!-- Title -->
+        <mxCell id="title" value="Pattern 1 — Simple &amp; Scalable Multi-Region Chat App" style="text;html=1;align=center;verticalAlign=middle;resizable=0;points=[];autosize=1;strokeColor=none;fillColor=none;fontSize=18;fontFamily=Segoe UI;fontStyle=1;fontColor=#242424;" vertex="1" parent="1">
+          <mxGeometry x="400" y="20" width="600" height="40" as="geometry"/>
+        </mxCell>
+        <mxCell id="subtitle" value="Public PaaS endpoints • Platform-managed HA • Lowest operational complexity" style="text;html=1;align=center;verticalAlign=middle;resizable=0;points=[];autosize=1;strokeColor=none;fillColor=none;fontSize=11;fontFamily=Segoe UI;fontColor=#616161;" vertex="1" parent="1">
+          <mxGeometry x="430" y="55" width="540" height="25" as="geometry"/>
+        </mxCell>
+
+        <!-- Users -->
+        <mxCell id="users" value="Users / Internal Apps" style="shape=ellipse;whiteSpace=wrap;html=1;fillColor=#F3F2F1;strokeColor=#616161;fontFamily=Segoe UI;fontSize=10;fontColor=#242424;" vertex="1" parent="1">
+          <mxGeometry x="660" y="90" width="130" height="50" as="geometry"/>
+        </mxCell>
+
+        <!-- Front Door -->
+        <mxCell id="fd" value="Azure Front Door&#xa;Global Routing + WAF + Health Probes" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#CFE4FA;strokeColor=#0078D4;fontFamily=Segoe UI;fontSize=10;fontColor=#242424;strokeWidth=2;" vertex="1" parent="1">
+          <mxGeometry x="640" y="175" width="180" height="55" as="geometry"/>
+        </mxCell>
+
+        <!-- Arrow: Users to FD -->
+        <mxCell id="e_users_fd" style="edgeStyle=orthogonalEdgeStyle;strokeColor=#0078D4;strokeWidth=2;endArrow=blockThin;endFill=1;" edge="1" source="users" target="fd" parent="1">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+
+        <!-- ═══════════ Region A ═══════════ -->
+        <mxCell id="regionA" value="Region A — Primary (East US)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=none;strokeColor=#0078D4;strokeWidth=2;fontFamily=Segoe UI;fontSize=12;fontStyle=1;fontColor=#0078D4;verticalAlign=top;align=left;spacingLeft=10;spacingTop=5;arcSize=4;" vertex="1" parent="1">
+          <mxGeometry x="80" y="270" width="560" height="420" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="swa_a" value="Static Web App&#xa;React UI + Global CDN" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#CFE4FA;strokeColor=#0078D4;fontFamily=Segoe UI;fontSize=10;fontColor=#242424;" vertex="1" parent="1">
+          <mxGeometry x="120" y="310" width="150" height="50" as="geometry"/>
+        </mxCell>
+        <mxCell id="apim_a" value="API Management&#xa;Load Balance + Retry&#xa;+ Circuit Breaker" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#CFE4FA;strokeColor=#0078D4;fontFamily=Segoe UI;fontSize=10;fontColor=#242424;" vertex="1" parent="1">
+          <mxGeometry x="310" y="310" width="150" height="55" as="geometry"/>
+        </mxCell>
+        <mxCell id="aca_a" value="Container Apps API&#xa;SSE Streaming&#xa;KEDA Autoscale&#xa;min-replicas ≥ 2" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#CFE4FA;strokeColor=#0078D4;fontFamily=Segoe UI;fontSize=10;fontColor=#242424;" vertex="1" parent="1">
+          <mxGeometry x="500" y="305" width="120" height="65" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="agent_a" value="AI Foundry Agent&#xa;Grounding + Citations&#xa;+ Tool Calling" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#DFF6DD;strokeColor=#107C10;fontFamily=Segoe UI;fontSize=10;fontColor=#242424;fontStyle=1;strokeWidth=2;" vertex="1" parent="1">
+          <mxGeometry x="230" y="420" width="170" height="55" as="geometry"/>
+        </mxCell>
+        <mxCell id="search_a" value="Azure AI Search&#xa;Integrated Vectorization&#xa;Hybrid + Semantic Ranking&#xa;Replicas + Partitions" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#DFF6DD;strokeColor=#107C10;fontFamily=Segoe UI;fontSize=10;fontColor=#242424;" vertex="1" parent="1">
+          <mxGeometry x="120" y="530" width="170" height="65" as="geometry"/>
+        </mxCell>
+        <mxCell id="aoai_a" value="Azure OpenAI&#xa;Global Standard&#xa;gpt-4o-mini + Embeddings" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#DFF6DD;strokeColor=#107C10;fontFamily=Segoe UI;fontSize=10;fontColor=#242424;" vertex="1" parent="1">
+          <mxGeometry x="340" y="530" width="160" height="55" as="geometry"/>
+        </mxCell>
+        <mxCell id="blob_a" value="Blob Storage&#xa;(Source of Truth)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F3F2F1;strokeColor=#616161;fontFamily=Segoe UI;fontSize=10;fontColor=#242424;" vertex="1" parent="1">
+          <mxGeometry x="530" y="540" width="100" height="45" as="geometry"/>
+        </mxCell>
+
+        <!-- ═══════════ Region B ═══════════ -->
+        <mxCell id="regionB" value="Region B — Active / Warm Standby (West US)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=none;strokeColor=#5C2D91;strokeWidth=2;dashed=1;fontFamily=Segoe UI;fontSize=12;fontStyle=1;fontColor=#5C2D91;verticalAlign=top;align=left;spacingLeft=10;spacingTop=5;arcSize=4;" vertex="1" parent="1">
+          <mxGeometry x="740" y="270" width="540" height="420" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="swa_b" value="Static Web App&#xa;React UI + Global CDN" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E8DAEF;strokeColor=#5C2D91;fontFamily=Segoe UI;fontSize=10;fontColor=#242424;" vertex="1" parent="1">
+          <mxGeometry x="780" y="310" width="150" height="50" as="geometry"/>
+        </mxCell>
+        <mxCell id="apim_b" value="API Management&#xa;Load Balance + Retry&#xa;+ Circuit Breaker" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E8DAEF;strokeColor=#5C2D91;fontFamily=Segoe UI;fontSize=10;fontColor=#242424;" vertex="1" parent="1">
+          <mxGeometry x="970" y="310" width="150" height="55" as="geometry"/>
+        </mxCell>
+        <mxCell id="aca_b" value="Container Apps API&#xa;SSE Streaming&#xa;KEDA Autoscale" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E8DAEF;strokeColor=#5C2D91;fontFamily=Segoe UI;fontSize=10;fontColor=#242424;" vertex="1" parent="1">
+          <mxGeometry x="1160" y="310" width="100" height="55" as="geometry"/>
+        </mxCell>
+        <mxCell id="agent_b" value="AI Foundry Agent" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#DFF6DD;strokeColor=#107C10;fontFamily=Segoe UI;fontSize=10;fontColor=#242424;fontStyle=1;strokeWidth=2;" vertex="1" parent="1">
+          <mxGeometry x="900" y="420" width="140" height="40" as="geometry"/>
+        </mxCell>
+        <mxCell id="search_b" value="Azure AI Search&#xa;(Replica)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#DFF6DD;strokeColor=#107C10;fontFamily=Segoe UI;fontSize=10;fontColor=#242424;" vertex="1" parent="1">
+          <mxGeometry x="800" y="530" width="130" height="45" as="geometry"/>
+        </mxCell>
+        <mxCell id="aoai_b" value="Azure OpenAI&#xa;Global Standard" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#DFF6DD;strokeColor=#107C10;fontFamily=Segoe UI;fontSize=10;fontColor=#242424;" vertex="1" parent="1">
+          <mxGeometry x="980" y="530" width="130" height="45" as="geometry"/>
+        </mxCell>
+
+        <!-- ═══════════ Shared Services ═══════════ -->
+        <mxCell id="shared" value="Shared Services (Global)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=none;strokeColor=#F7630C;strokeWidth=2;dashed=1;fontFamily=Segoe UI;fontSize=12;fontStyle=1;fontColor=#F7630C;verticalAlign=top;align=center;spacingTop=5;arcSize=4;" vertex="1" parent="1">
+          <mxGeometry x="200" y="730" width="960" height="90" as="geometry"/>
+        </mxCell>
+        <mxCell id="cosmos" value="Cosmos DB&#xa;Multi-Region Writes&#xa;99.999% SLA" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFF4CE;strokeColor=#F7630C;fontFamily=Segoe UI;fontSize=10;fontColor=#242424;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="260" y="755" width="155" height="50" as="geometry"/>
+        </mxCell>
+        <mxCell id="appconfig" value="App Configuration&#xa;+ Key Vault&#xa;(Managed Identity)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFF4CE;strokeColor=#F7630C;fontFamily=Segoe UI;fontSize=10;fontColor=#242424;" vertex="1" parent="1">
+          <mxGeometry x="470" y="755" width="145" height="50" as="geometry"/>
+        </mxCell>
+        <mxCell id="monitor" value="Application Insights&#xa;+ Log Analytics&#xa;Token Usage Metrics" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFF4CE;strokeColor=#F7630C;fontFamily=Segoe UI;fontSize=10;fontColor=#242424;" vertex="1" parent="1">
+          <mxGeometry x="670" y="755" width="155" height="50" as="geometry"/>
+        </mxCell>
+        <mxCell id="loadtest" value="Azure Load Testing&#xa;+ Cost Analysis" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFF4CE;strokeColor=#F7630C;fontFamily=Segoe UI;fontSize=10;fontColor=#242424;" vertex="1" parent="1">
+          <mxGeometry x="880" y="755" width="135" height="50" as="geometry"/>
+        </mxCell>
+
+        <!-- ═══════════ Connectors ═══════════ -->
+        <!-- FD to regions -->
+        <mxCell id="e_fd_swa_a" style="edgeStyle=orthogonalEdgeStyle;strokeColor=#0078D4;strokeWidth=2;endArrow=blockThin;endFill=1;" edge="1" source="fd" target="swa_a" parent="1">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="e_fd_swa_b" style="edgeStyle=orthogonalEdgeStyle;strokeColor=#5C2D91;strokeWidth=2;endArrow=blockThin;endFill=1;dashed=1;" edge="1" source="fd" target="swa_b" parent="1">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+
+        <!-- Region A flow -->
+        <mxCell id="e_swa_apim_a" style="edgeStyle=orthogonalEdgeStyle;strokeColor=#0078D4;strokeWidth=1.5;endArrow=blockThin;endFill=1;" edge="1" source="swa_a" target="apim_a" parent="1">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="e_apim_aca_a" style="edgeStyle=orthogonalEdgeStyle;strokeColor=#0078D4;strokeWidth=1.5;endArrow=blockThin;endFill=1;" edge="1" source="apim_a" target="aca_a" parent="1">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="e_aca_agent_a" style="edgeStyle=orthogonalEdgeStyle;strokeColor=#107C10;strokeWidth=1.5;endArrow=blockThin;endFill=1;" edge="1" source="aca_a" target="agent_a" parent="1">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="e_agent_search_a" style="edgeStyle=orthogonalEdgeStyle;strokeColor=#107C10;strokeWidth=1.5;endArrow=blockThin;endFill=1;" edge="1" source="agent_a" target="search_a" parent="1">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="e_agent_aoai_a" style="edgeStyle=orthogonalEdgeStyle;strokeColor=#107C10;strokeWidth=1.5;endArrow=blockThin;endFill=1;" edge="1" source="agent_a" target="aoai_a" parent="1">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="e_search_blob_a" style="edgeStyle=orthogonalEdgeStyle;strokeColor=#616161;strokeWidth=1;endArrow=blockThin;endFill=1;dashed=1;" edge="1" source="search_a" target="blob_a" parent="1">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+
+        <!-- Region B flow -->
+        <mxCell id="e_swa_apim_b" style="edgeStyle=orthogonalEdgeStyle;strokeColor=#5C2D91;strokeWidth=1.5;endArrow=blockThin;endFill=1;" edge="1" source="swa_b" target="apim_b" parent="1">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="e_apim_aca_b" style="edgeStyle=orthogonalEdgeStyle;strokeColor=#5C2D91;strokeWidth=1.5;endArrow=blockThin;endFill=1;" edge="1" source="apim_b" target="aca_b" parent="1">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="e_aca_agent_b" style="edgeStyle=orthogonalEdgeStyle;strokeColor=#107C10;strokeWidth=1.5;endArrow=blockThin;endFill=1;" edge="1" source="aca_b" target="agent_b" parent="1">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="e_agent_search_b" style="edgeStyle=orthogonalEdgeStyle;strokeColor=#107C10;strokeWidth=1.5;endArrow=blockThin;endFill=1;" edge="1" source="agent_b" target="search_b" parent="1">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="e_agent_aoai_b" style="edgeStyle=orthogonalEdgeStyle;strokeColor=#107C10;strokeWidth=1.5;endArrow=blockThin;endFill=1;" edge="1" source="agent_b" target="aoai_b" parent="1">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+
+        <!-- Shared service connections -->
+        <mxCell id="e_aca_cosmos_a" style="edgeStyle=orthogonalEdgeStyle;strokeColor=#F7630C;strokeWidth=1.5;endArrow=blockThin;endFill=1;dashed=1;" edge="1" source="aca_a" target="cosmos" parent="1">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="e_aca_cosmos_b" style="edgeStyle=orthogonalEdgeStyle;strokeColor=#F7630C;strokeWidth=1.5;endArrow=blockThin;endFill=1;dashed=1;" edge="1" source="aca_b" target="cosmos" parent="1">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+
+        <!-- ═══════════ Legend ═══════════ -->
+        <mxCell id="legend_box" value="" style="rounded=1;whiteSpace=wrap;html=1;fillColor=none;strokeColor=#242424;strokeWidth=1;fontFamily=Segoe UI;fontSize=11;arcSize=10;" vertex="1" parent="1">
+          <mxGeometry x="1160" y="730" width="185" height="90" as="geometry"/>
+        </mxCell>
+        <mxCell id="legend_title" value="Legend" style="text;html=1;align=left;verticalAlign=middle;strokeColor=none;fillColor=none;fontFamily=Segoe UI;fontSize=10;fontStyle=1;fontColor=#242424;" vertex="1" parent="1">
+          <mxGeometry x="1170" y="733" width="60" height="18" as="geometry"/>
+        </mxCell>
+        <mxCell id="leg1" value="" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#CFE4FA;strokeColor=#0078D4;" vertex="1" parent="1">
+          <mxGeometry x="1175" y="755" width="14" height="14" as="geometry"/>
+        </mxCell>
+        <mxCell id="leg1t" value="Platform / Network" style="text;html=1;align=left;verticalAlign=middle;strokeColor=none;fillColor=none;fontFamily=Segoe UI;fontSize=9;fontColor=#242424;" vertex="1" parent="1">
+          <mxGeometry x="1195" y="753" width="110" height="18" as="geometry"/>
+        </mxCell>
+        <mxCell id="leg2" value="" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#DFF6DD;strokeColor=#107C10;" vertex="1" parent="1">
+          <mxGeometry x="1175" y="775" width="14" height="14" as="geometry"/>
+        </mxCell>
+        <mxCell id="leg2t" value="AI / Intelligence" style="text;html=1;align=left;verticalAlign=middle;strokeColor=none;fillColor=none;fontFamily=Segoe UI;fontSize=9;fontColor=#242424;" vertex="1" parent="1">
+          <mxGeometry x="1195" y="773" width="110" height="18" as="geometry"/>
+        </mxCell>
+        <mxCell id="leg3" value="" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFF4CE;strokeColor=#F7630C;" vertex="1" parent="1">
+          <mxGeometry x="1175" y="795" width="14" height="14" as="geometry"/>
+        </mxCell>
+        <mxCell id="leg3t" value="Shared / Operations" style="text;html=1;align=left;verticalAlign=middle;strokeColor=none;fillColor=none;fontFamily=Segoe UI;fontSize=9;fontColor=#242424;" vertex="1" parent="1">
+          <mxGeometry x="1195" y="793" width="110" height="18" as="geometry"/>
+        </mxCell>
+
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

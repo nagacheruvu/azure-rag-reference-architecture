@@ -1,0 +1,27 @@
+flowchart TB
+    FD[Front Door + WAF<br/>global failover]
+    subgraph Region1[Region 1]
+      direction TB
+      SWA1[Static Web App] --> APIM1[APIM] --> ACA1[Container Apps API]
+      ACA1 --> AG1[Foundry Agent]
+      AG1 --> S1[(AI Search<br/>replicas+partitions)]
+      AG1 --> AO1[AOAI Global Std]
+      APIM1 -. LB+circuit breaker .- AO1
+    end
+    subgraph Region2[Region 2]
+      ACA2[Container Apps API] --> AG2[Foundry Agent]
+      AG2 --> S2[(AI Search)]
+      AG2 --> AO2[AOAI Global Std]
+    end
+    COSMOS[(Cosmos DB<br/>multi-region writes)]
+    SB[[Service Bus<br/>geo-DR — optional priority lanes]]
+    CFG[App Config + Key Vault]
+    MON[App Insights]
+
+    FD --> SWA1
+    FD --> ACA2
+    ACA1 --> COSMOS
+    ACA2 --> COSMOS
+    ACA1 -. optional .- SB
+    ACA1 --- CFG
+    ACA1 --- MON

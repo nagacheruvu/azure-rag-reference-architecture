@@ -1,0 +1,35 @@
+# azd
+.azure/
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.env
+*.egg-info/
+
+# Node
+node_modules/
+dist/
+.vite/
+*.local
+
+# Editors
+.DS_Store
+.idea/
+*.swp
+
+# Secrets / local config
+*.local.json
+local.settings.json
+.vscode/mcp.json
+
+# Run artifacts / generated reports / logs (may contain subscription/tenant IDs)
+*.log
+*-report.html
+private-connectivity-report.html
+mcp-e2e-validation-report.html
+scripts/sample_report.html
+*.bkp
+*.drawio.bkp

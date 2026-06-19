@@ -1,0 +1,27 @@
+flowchart TB
+    User([Internal Apps / Users])
+    FD[Azure Front Door<br/>global routing + WAF]
+    SWA[Static Web Apps<br/>React UI]
+    APIM[API Management]
+
+    subgraph RG[Region A &amp; B identical]
+      ACA[Container Apps<br/>chat API - SSE streaming]
+      AGENT[AI Foundry<br/>Agent Service - Knowledge Base]
+      SEARCH[(Azure AI Search<br/>vector + semantic)]
+      AOAI[Azure OpenAI<br/>gpt-4o-mini + embeddings]
+    end
+
+    COSMOS[(Cosmos DB<br/>chat history - multi-region)]
+    BLOB[(Blob Storage<br/>document landing zone)]
+    DOCINT[Document Intelligence<br/>parse / OCR]
+    AICFG[App Config + Key Vault]
+    MON[App Insights / Log Analytics]
+
+    User --> FD --> SWA --> APIM --> ACA --> AGENT
+    AGENT --> AOAI
+    AGENT --> SEARCH
+    ACA --> COSMOS
+    BLOB --> DOCINT --> SEARCH
+    SEARCH -. integrated vectorization .-> AOAI
+    ACA --- AICFG
+    ACA --- MON

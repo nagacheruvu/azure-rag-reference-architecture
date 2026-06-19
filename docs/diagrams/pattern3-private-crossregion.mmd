@@ -1,0 +1,27 @@
+%% Pattern 3 — Foundry (Central US) + AI Search (East US), public access DISABLED,
+%% reached only via Private Endpoints + Private DNS across regions. Maps to infra/nsp-private/.
+flowchart TB
+    subgraph VNET[Hub/Spoke VNet - Central US 10.40.0.0/16]
+      direction TB
+      subgraph PE[snet-pe - private endpoints]
+        PEF[PE -> Foundry<br/>group: account]
+        PES[PE -> AI Search<br/>group: searchService<br/>cross-region link]
+      end
+      subgraph WORK[snet-app - workload]
+        ACA[Container Apps / ACI<br/>chat API + agent client<br/>user-assigned MI]
+      end
+      DNS[Private DNS zones<br/>privatelink.openai / cognitiveservices /<br/>services.ai / search.windows.net]
+      NSG[NSG: deny Internet egress<br/>allow AzureActiveDirectory + VNet]
+    end
+
+    FDY[AI Foundry / AIServices<br/>Central US<br/>publicNetworkAccess = Disabled]
+    SR[(Azure AI Search<br/>East US<br/>publicNetworkAccess = Disabled)]
+    AAD[Entra ID<br/>token endpoint]
+
+    ACA -->|resolves via| DNS
+    DNS -. private IPs .-> PEF
+    DNS -. private IPs .-> PES
+    PEF ==>|private link| FDY
+    PES ==>|private link, cross-region| SR
+    ACA -->|Bearer token<br/>service tag allowed| AAD
+    NSG -. governs .- ACA

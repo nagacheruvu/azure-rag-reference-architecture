@@ -1,0 +1,7 @@
+mcp>=1.2.0
+uvicorn[standard]>=0.30.0
+starlette>=0.37.0
+# In-VNet end-to-end validator (run as an ACA Job from the same image).
+# McpTool requires the preview line (>=1.1.0b1); GA 1.0.0/1.1.0 do not ship it.
+azure-ai-agents==1.2.0b6
+azure-identity>=1.17.0

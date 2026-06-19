@@ -1,0 +1,45 @@
+%% Pattern 1 — Simple, scalable multi-region chat app (public PaaS, platform-managed HA)
+flowchart TB
+    User([Users / Internal Apps])
+    FD[Azure Front Door<br/>global routing + WAF + health probes]
+
+    subgraph RA[Region A - primary]
+      direction TB
+      SWA_A[Static Web App<br/>React UI]
+      APIM_A[API Management]
+      ACA_A[Container Apps<br/>chat API - SSE]
+      AG_A[AI Foundry Agent]
+      SR_A[(AI Search<br/>replicas + partitions)]
+      AO_A[Azure OpenAI<br/>Global Standard]
+      SWA_A --> APIM_A --> ACA_A --> AG_A
+      AG_A --> SR_A
+      AG_A --> AO_A
+      APIM_A -. LB + circuit breaker .- AO_A
+    end
+
+    subgraph RB[Region B - active or warm standby]
+      direction TB
+      SWA_B[Static Web App]
+      APIM_B[API Management]
+      ACA_B[Container Apps API]
+      AG_B[AI Foundry Agent]
+      SR_B[(AI Search)]
+      AO_B[Azure OpenAI<br/>Global Standard]
+      SWA_B --> APIM_B --> ACA_B --> AG_B
+      AG_B --> SR_B
+      AG_B --> AO_B
+    end
+
+    COSMOS[(Cosmos DB<br/>multi-region writes)]
+    CFG[App Config + Key Vault]
+    MON[App Insights / Log Analytics]
+
+    User --> FD
+    FD --> SWA_A
+    FD --> SWA_B
+    ACA_A --> COSMOS
+    ACA_B --> COSMOS
+    ACA_A --- CFG
+    ACA_A --- MON
+    ACA_B --- CFG
+    ACA_B --- MON

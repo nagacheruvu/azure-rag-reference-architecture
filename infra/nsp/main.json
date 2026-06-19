@@ -1,0 +1,520 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2018-05-01/subscriptionDeploymentTemplate.json#",
+  "contentVersion": "1.0.0.0",
+  "metadata": {
+    "_generator": {
+      "name": "bicep",
+      "version": "0.42.1.51946",
+      "templateHash": "16511953732251686446"
+    }
+  },
+  "parameters": {
+    "environmentName": {
+      "type": "string",
+      "defaultValue": "nsp-demo",
+      "minLength": 1,
+      "maxLength": 60,
+      "metadata": {
+        "description": "Short name used to derive the resource group and resource names."
+      }
+    },
+    "location": {
+      "type": "string",
+      "defaultValue": "eastus",
+      "metadata": {
+        "description": "Primary region for the Microsoft Foundry (AIServices) account, NSP and Log Analytics."
+      }
+    },
+    "searchLocation": {
+      "type": "string",
+      "defaultValue": "westus2",
+      "metadata": {
+        "description": "Secondary region for the Azure AI Search service. MUST differ from `location` to exercise the cross-region NSP scenario."
+      }
+    },
+    "principalId": {
+      "type": "string",
+      "defaultValue": "",
+      "metadata": {
+        "description": "Object ID of the signed-in user/principal — granted data-plane roles so the test client can call Foundry and Search."
+      }
+    },
+    "accessMode": {
+      "type": "string",
+      "defaultValue": "Learning",
+      "allowedValues": [
+        "Learning",
+        "Enforced",
+        "Audit"
+      ],
+      "metadata": {
+        "description": "NSP access mode for the resource associations. Start with Learning, then switch to Enforced once access logs look correct."
+      }
+    },
+    "clientIpAddress": {
+      "type": "string",
+      "defaultValue": "",
+      "metadata": {
+        "description": "Public IP (or CIDR) allowed inbound by the NSP profile. Empty skips the inbound IP rule."
+      }
+    }
+  },
+  "variables": {
+    "resourceToken": "[uniqueString(subscription().id, parameters('location'), parameters('environmentName'))]",
+    "tags": {
+      "azd-env-name": "[parameters('environmentName')]",
+      "project": "foundry-nsp",
+      "scenario": "foundry-to-search-cross-region"
+    }
+  },
+  "resources": [
+    {
+      "type": "Microsoft.Resources/resourceGroups",
+      "apiVersion": "2024-03-01",
+      "name": "[format('rg-{0}', parameters('environmentName'))]",
+      "location": "[parameters('location')]",
+      "tags": "[variables('tags')]"
+    },
+    {
+      "type": "Microsoft.Resources/deployments",
+      "apiVersion": "2025-04-01",
+      "name": "foundry-nsp-resources",
+      "resourceGroup": "[format('rg-{0}', parameters('environmentName'))]",
+      "properties": {
+        "expressionEvaluationOptions": {
+          "scope": "inner"
+        },
+        "mode": "Incremental",
+        "parameters": {
+          "location": {
+            "value": "[parameters('location')]"
+          },
+          "searchLocation": {
+            "value": "[parameters('searchLocation')]"
+          },
+          "resourceToken": {
+            "value": "[variables('resourceToken')]"
+          },
+          "tags": {
+            "value": "[variables('tags')]"
+          },
+          "principalId": {
+            "value": "[parameters('principalId')]"
+          },
+          "accessMode": {
+            "value": "[parameters('accessMode')]"
+          },
+          "clientIpAddress": {
+            "value": "[parameters('clientIpAddress')]"
+          }
+        },
+        "template": {
+          "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+          "contentVersion": "1.0.0.0",
+          "metadata": {
+            "_generator": {
+              "name": "bicep",
+              "version": "0.42.1.51946",
+              "templateHash": "16943618499884672639"
+            }
+          },
+          "parameters": {
+            "location": {
+              "type": "string",
+              "metadata": {
+                "description": "Primary region (Foundry, NSP, Log Analytics)."
+              }
+            },
+            "searchLocation": {
+              "type": "string",
+              "metadata": {
+                "description": "Secondary region (Azure AI Search) — different from `location`."
+              }
+            },
+            "resourceToken": {
+              "type": "string",
+              "metadata": {
+                "description": "Deterministic token used to build globally-unique resource names."
+              }
+            },
+            "tags": {
+              "type": "object",
+              "metadata": {
+                "description": "Tags applied to every resource."
+              }
+            },
+            "principalId": {
+              "type": "string",
+              "metadata": {
+                "description": "Object ID of the signed-in principal granted data-plane roles for testing."
+              }
+            },
+            "accessMode": {
+              "type": "string",
+              "metadata": {
+                "description": "NSP association access mode: Learning, Enforced, or Audit."
+              }
+            },
+            "clientIpAddress": {
+              "type": "string",
+              "defaultValue": "",
+              "metadata": {
+                "description": "Public IP address (or CIDR) allowed inbound by the NSP profile. Leave empty to skip the inbound IP rule. Using an IP rule keeps the deploy least-privilege (a subscription-based rule needs joinPerimeterRule/action at subscription scope)."
+              }
+            }
+          },
+          "variables": {
+            "hasPrincipal": "[not(empty(parameters('principalId')))]",
+            "hasClientIp": "[not(empty(parameters('clientIpAddress')))]",
+            "clientIpPrefix": "[if(variables('hasClientIp'), if(greaterOrEquals(indexOf(parameters('clientIpAddress'), '/'), 0), parameters('clientIpAddress'), format('{0}/32', parameters('clientIpAddress'))), '')]",
+            "roleCognitiveServicesOpenAIUser": "5e0bd9bd-7b93-4f28-af87-19fc36ad61bd",
+            "roleCognitiveServicesUser": "a97b65f3-24c7-4388-baec-2e87135dc908",
+            "roleSearchIndexDataContributor": "8ebe5a00-799e-43f5-93ac-243d3dce84a7",
+            "roleSearchServiceContributor": "7ca78c08-252a-4471-8644-bb5ff32d4ba0"
+          },
+          "resources": [
+            {
+              "type": "Microsoft.OperationalInsights/workspaces",
+              "apiVersion": "2023-09-01",
+              "name": "[format('log-{0}', parameters('resourceToken'))]",
+              "location": "[parameters('location')]",
+              "tags": "[parameters('tags')]",
+              "properties": {
+                "sku": {
+                  "name": "PerGB2018"
+                },
+                "retentionInDays": 30,
+                "features": {
+                  "enableLogAccessUsingOnlyResourcePermissions": true
+                }
+              }
+            },
+            {
+              "type": "Microsoft.CognitiveServices/accounts",
+              "apiVersion": "2024-10-01",
+              "name": "[format('foundry{0}', parameters('resourceToken'))]",
+              "location": "[parameters('location')]",
+              "tags": "[parameters('tags')]",
+              "kind": "AIServices",
+              "sku": {
+                "name": "S0"
+              },
+              "identity": {
+                "type": "SystemAssigned"
+              },
+              "properties": {
+                "customSubDomainName": "[format('foundry{0}', parameters('resourceToken'))]",
+                "publicNetworkAccess": "Enabled",
+                "disableLocalAuth": true
+              }
+            },
+            {
+              "type": "Microsoft.Search/searchServices",
+              "apiVersion": "2024-06-01-preview",
+              "name": "[format('srch{0}', parameters('resourceToken'))]",
+              "location": "[parameters('searchLocation')]",
+              "tags": "[parameters('tags')]",
+              "sku": {
+                "name": "basic"
+              },
+              "identity": {
+                "type": "SystemAssigned"
+              },
+              "properties": {
+                "replicaCount": 1,
+                "partitionCount": 1,
+                "hostingMode": "default",
+                "semanticSearch": "standard",
+                "publicNetworkAccess": "enabled",
+                "disableLocalAuth": true
+              }
+            },
+            {
+              "type": "Microsoft.Authorization/roleAssignments",
+              "apiVersion": "2022-04-01",
+              "scope": "[resourceId('Microsoft.Search/searchServices', format('srch{0}', parameters('resourceToken')))]",
+              "name": "[guid(resourceId('Microsoft.Search/searchServices', format('srch{0}', parameters('resourceToken'))), resourceId('Microsoft.CognitiveServices/accounts', format('foundry{0}', parameters('resourceToken'))), variables('roleSearchIndexDataContributor'))]",
+              "properties": {
+                "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', variables('roleSearchIndexDataContributor'))]",
+                "principalId": "[reference(resourceId('Microsoft.CognitiveServices/accounts', format('foundry{0}', parameters('resourceToken'))), '2024-10-01', 'full').identity.principalId]",
+                "principalType": "ServicePrincipal"
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.CognitiveServices/accounts', format('foundry{0}', parameters('resourceToken')))]",
+                "[resourceId('Microsoft.Search/searchServices', format('srch{0}', parameters('resourceToken')))]"
+              ]
+            },
+            {
+              "type": "Microsoft.Authorization/roleAssignments",
+              "apiVersion": "2022-04-01",
+              "scope": "[resourceId('Microsoft.CognitiveServices/accounts', format('foundry{0}', parameters('resourceToken')))]",
+              "name": "[guid(resourceId('Microsoft.CognitiveServices/accounts', format('foundry{0}', parameters('resourceToken'))), resourceId('Microsoft.Search/searchServices', format('srch{0}', parameters('resourceToken'))), variables('roleCognitiveServicesOpenAIUser'))]",
+              "properties": {
+                "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', variables('roleCognitiveServicesOpenAIUser'))]",
+                "principalId": "[reference(resourceId('Microsoft.Search/searchServices', format('srch{0}', parameters('resourceToken'))), '2024-06-01-preview', 'full').identity.principalId]",
+                "principalType": "ServicePrincipal"
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.CognitiveServices/accounts', format('foundry{0}', parameters('resourceToken')))]",
+                "[resourceId('Microsoft.Search/searchServices', format('srch{0}', parameters('resourceToken')))]"
+              ]
+            },
+            {
+              "condition": "[variables('hasPrincipal')]",
+              "type": "Microsoft.Authorization/roleAssignments",
+              "apiVersion": "2022-04-01",
+              "scope": "[resourceId('Microsoft.CognitiveServices/accounts', format('foundry{0}', parameters('resourceToken')))]",
+              "name": "[guid(resourceId('Microsoft.CognitiveServices/accounts', format('foundry{0}', parameters('resourceToken'))), parameters('principalId'), variables('roleCognitiveServicesUser'))]",
+              "properties": {
+                "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', variables('roleCognitiveServicesUser'))]",
+                "principalId": "[parameters('principalId')]",
+                "principalType": "User"
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.CognitiveServices/accounts', format('foundry{0}', parameters('resourceToken')))]"
+              ]
+            },
+            {
+              "condition": "[variables('hasPrincipal')]",
+              "type": "Microsoft.Authorization/roleAssignments",
+              "apiVersion": "2022-04-01",
+              "scope": "[resourceId('Microsoft.CognitiveServices/accounts', format('foundry{0}', parameters('resourceToken')))]",
+              "name": "[guid(resourceId('Microsoft.CognitiveServices/accounts', format('foundry{0}', parameters('resourceToken'))), parameters('principalId'), variables('roleCognitiveServicesOpenAIUser'))]",
+              "properties": {
+                "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', variables('roleCognitiveServicesOpenAIUser'))]",
+                "principalId": "[parameters('principalId')]",
+                "principalType": "User"
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.CognitiveServices/accounts', format('foundry{0}', parameters('resourceToken')))]"
+              ]
+            },
+            {
+              "condition": "[variables('hasPrincipal')]",
+              "type": "Microsoft.Authorization/roleAssignments",
+              "apiVersion": "2022-04-01",
+              "scope": "[resourceId('Microsoft.Search/searchServices', format('srch{0}', parameters('resourceToken')))]",
+              "name": "[guid(resourceId('Microsoft.Search/searchServices', format('srch{0}', parameters('resourceToken'))), parameters('principalId'), variables('roleSearchServiceContributor'))]",
+              "properties": {
+                "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', variables('roleSearchServiceContributor'))]",
+                "principalId": "[parameters('principalId')]",
+                "principalType": "User"
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.Search/searchServices', format('srch{0}', parameters('resourceToken')))]"
+              ]
+            },
+            {
+              "condition": "[variables('hasPrincipal')]",
+              "type": "Microsoft.Authorization/roleAssignments",
+              "apiVersion": "2022-04-01",
+              "scope": "[resourceId('Microsoft.Search/searchServices', format('srch{0}', parameters('resourceToken')))]",
+              "name": "[guid(resourceId('Microsoft.Search/searchServices', format('srch{0}', parameters('resourceToken'))), parameters('principalId'), variables('roleSearchIndexDataContributor'))]",
+              "properties": {
+                "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', variables('roleSearchIndexDataContributor'))]",
+                "principalId": "[parameters('principalId')]",
+                "principalType": "User"
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.Search/searchServices', format('srch{0}', parameters('resourceToken')))]"
+              ]
+            },
+            {
+              "type": "Microsoft.Network/networkSecurityPerimeters",
+              "apiVersion": "2024-07-01",
+              "name": "[format('nsp-{0}', parameters('resourceToken'))]",
+              "location": "[parameters('location')]",
+              "tags": "[parameters('tags')]"
+            },
+            {
+              "type": "Microsoft.Network/networkSecurityPerimeters/profiles",
+              "apiVersion": "2024-07-01",
+              "name": "[format('{0}/{1}', format('nsp-{0}', parameters('resourceToken')), 'foundry-search-profile')]",
+              "dependsOn": [
+                "[resourceId('Microsoft.Network/networkSecurityPerimeters', format('nsp-{0}', parameters('resourceToken')))]"
+              ]
+            },
+            {
+              "condition": "[variables('hasClientIp')]",
+              "type": "Microsoft.Network/networkSecurityPerimeters/profiles/accessRules",
+              "apiVersion": "2024-07-01",
+              "name": "[format('{0}/{1}/{2}', format('nsp-{0}', parameters('resourceToken')), 'foundry-search-profile', 'allow-inbound-client-ip')]",
+              "properties": {
+                "direction": "Inbound",
+                "addressPrefixes": [
+                  "[variables('clientIpPrefix')]"
+                ]
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.Network/networkSecurityPerimeters/profiles', format('nsp-{0}', parameters('resourceToken')), 'foundry-search-profile')]"
+              ]
+            },
+            {
+              "type": "Microsoft.Network/networkSecurityPerimeters/profiles/accessRules",
+              "apiVersion": "2024-07-01",
+              "name": "[format('{0}/{1}/{2}', format('nsp-{0}', parameters('resourceToken')), 'foundry-search-profile', 'allow-outbound-fqdns')]",
+              "properties": {
+                "direction": "Outbound",
+                "fullyQualifiedDomainNames": [
+                  "[format('{0}.openai.azure.com', format('foundry{0}', parameters('resourceToken')))]",
+                  "[format('{0}.cognitiveservices.azure.com', format('foundry{0}', parameters('resourceToken')))]",
+                  "[format('{0}.search.windows.net', format('srch{0}', parameters('resourceToken')))]"
+                ]
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.CognitiveServices/accounts', format('foundry{0}', parameters('resourceToken')))]",
+                "[resourceId('Microsoft.Network/networkSecurityPerimeters/profiles', format('nsp-{0}', parameters('resourceToken')), 'foundry-search-profile')]",
+                "[resourceId('Microsoft.Search/searchServices', format('srch{0}', parameters('resourceToken')))]"
+              ]
+            },
+            {
+              "type": "Microsoft.Network/networkSecurityPerimeters/resourceAssociations",
+              "apiVersion": "2024-07-01",
+              "name": "[format('{0}/{1}', format('nsp-{0}', parameters('resourceToken')), 'assoc-foundry')]",
+              "properties": {
+                "accessMode": "[parameters('accessMode')]",
+                "privateLinkResource": {
+                  "id": "[resourceId('Microsoft.CognitiveServices/accounts', format('foundry{0}', parameters('resourceToken')))]"
+                },
+                "profile": {
+                  "id": "[resourceId('Microsoft.Network/networkSecurityPerimeters/profiles', format('nsp-{0}', parameters('resourceToken')), 'foundry-search-profile')]"
+                }
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.CognitiveServices/accounts', format('foundry{0}', parameters('resourceToken')))]",
+                "[resourceId('Microsoft.Network/networkSecurityPerimeters', format('nsp-{0}', parameters('resourceToken')))]",
+                "[resourceId('Microsoft.Network/networkSecurityPerimeters/profiles', format('nsp-{0}', parameters('resourceToken')), 'foundry-search-profile')]"
+              ]
+            },
+            {
+              "type": "Microsoft.Network/networkSecurityPerimeters/resourceAssociations",
+              "apiVersion": "2024-07-01",
+              "name": "[format('{0}/{1}', format('nsp-{0}', parameters('resourceToken')), 'assoc-search')]",
+              "properties": {
+                "accessMode": "[parameters('accessMode')]",
+                "privateLinkResource": {
+                  "id": "[resourceId('Microsoft.Search/searchServices', format('srch{0}', parameters('resourceToken')))]"
+                },
+                "profile": {
+                  "id": "[resourceId('Microsoft.Network/networkSecurityPerimeters/profiles', format('nsp-{0}', parameters('resourceToken')), 'foundry-search-profile')]"
+                }
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.Network/networkSecurityPerimeters', format('nsp-{0}', parameters('resourceToken')))]",
+                "[resourceId('Microsoft.Network/networkSecurityPerimeters/profiles', format('nsp-{0}', parameters('resourceToken')), 'foundry-search-profile')]",
+                "[resourceId('Microsoft.Search/searchServices', format('srch{0}', parameters('resourceToken')))]"
+              ]
+            },
+            {
+              "type": "Microsoft.Insights/diagnosticSettings",
+              "apiVersion": "2021-05-01-preview",
+              "scope": "[resourceId('Microsoft.Network/networkSecurityPerimeters', format('nsp-{0}', parameters('resourceToken')))]",
+              "name": "nsp-alllogs",
+              "properties": {
+                "workspaceId": "[resourceId('Microsoft.OperationalInsights/workspaces', format('log-{0}', parameters('resourceToken')))]",
+                "logAnalyticsDestinationType": "Dedicated",
+                "logs": [
+                  {
+                    "categoryGroup": "allLogs",
+                    "enabled": true
+                  }
+                ]
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.OperationalInsights/workspaces', format('log-{0}', parameters('resourceToken')))]",
+                "[resourceId('Microsoft.Network/networkSecurityPerimeters', format('nsp-{0}', parameters('resourceToken')))]"
+              ]
+            }
+          ],
+          "outputs": {
+            "foundryEndpoint": {
+              "type": "string",
+              "value": "[reference(resourceId('Microsoft.CognitiveServices/accounts', format('foundry{0}', parameters('resourceToken'))), '2024-10-01').endpoint]"
+            },
+            "searchEndpoint": {
+              "type": "string",
+              "value": "[format('https://{0}.search.windows.net', format('srch{0}', parameters('resourceToken')))]"
+            },
+            "nspId": {
+              "type": "string",
+              "value": "[resourceId('Microsoft.Network/networkSecurityPerimeters', format('nsp-{0}', parameters('resourceToken')))]"
+            },
+            "nspProfileId": {
+              "type": "string",
+              "value": "[resourceId('Microsoft.Network/networkSecurityPerimeters/profiles', format('nsp-{0}', parameters('resourceToken')), 'foundry-search-profile')]"
+            },
+            "logAnalyticsWorkspaceCustomerId": {
+              "type": "string",
+              "value": "[reference(resourceId('Microsoft.OperationalInsights/workspaces', format('log-{0}', parameters('resourceToken'))), '2023-09-01').customerId]"
+            },
+            "logAnalyticsWorkspaceId": {
+              "type": "string",
+              "value": "[resourceId('Microsoft.OperationalInsights/workspaces', format('log-{0}', parameters('resourceToken')))]"
+            }
+          }
+        }
+      },
+      "dependsOn": [
+        "[subscriptionResourceId('Microsoft.Resources/resourceGroups', format('rg-{0}', parameters('environmentName')))]"
+      ]
+    }
+  ],
+  "outputs": {
+    "foundryEndpoint": {
+      "type": "string",
+      "metadata": {
+        "description": "Microsoft Foundry (AIServices) data-plane endpoint."
+      },
+      "value": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, format('rg-{0}', parameters('environmentName'))), 'Microsoft.Resources/deployments', 'foundry-nsp-resources'), '2025-04-01').outputs.foundryEndpoint.value]"
+    },
+    "searchEndpoint": {
+      "type": "string",
+      "metadata": {
+        "description": "Azure AI Search data-plane endpoint (secondary region)."
+      },
+      "value": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, format('rg-{0}', parameters('environmentName'))), 'Microsoft.Resources/deployments', 'foundry-nsp-resources'), '2025-04-01').outputs.searchEndpoint.value]"
+    },
+    "nspId": {
+      "type": "string",
+      "metadata": {
+        "description": "Resource ID of the network security perimeter."
+      },
+      "value": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, format('rg-{0}', parameters('environmentName'))), 'Microsoft.Resources/deployments', 'foundry-nsp-resources'), '2025-04-01').outputs.nspId.value]"
+    },
+    "nspProfileId": {
+      "type": "string",
+      "metadata": {
+        "description": "Resource ID of the NSP profile both resources are associated with."
+      },
+      "value": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, format('rg-{0}', parameters('environmentName'))), 'Microsoft.Resources/deployments', 'foundry-nsp-resources'), '2025-04-01').outputs.nspProfileId.value]"
+    },
+    "logAnalyticsWorkspaceCustomerId": {
+      "type": "string",
+      "metadata": {
+        "description": "Customer-immutable ID of the Log Analytics workspace holding NspAccessLogs."
+      },
+      "value": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, format('rg-{0}', parameters('environmentName'))), 'Microsoft.Resources/deployments', 'foundry-nsp-resources'), '2025-04-01').outputs.logAnalyticsWorkspaceCustomerId.value]"
+    },
+    "logAnalyticsWorkspaceId": {
+      "type": "string",
+      "metadata": {
+        "description": "Resource ID of the Log Analytics workspace holding NspAccessLogs."
+      },
+      "value": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, format('rg-{0}', parameters('environmentName'))), 'Microsoft.Resources/deployments', 'foundry-nsp-resources'), '2025-04-01').outputs.logAnalyticsWorkspaceId.value]"
+    },
+    "accessMode": {
+      "type": "string",
+      "metadata": {
+        "description": "Effective access mode applied to the associations."
+      },
+      "value": "[parameters('accessMode')]"
+    },
+    "resourceGroupName": {
+      "type": "string",
+      "metadata": {
+        "description": "Resource group the demo was deployed into."
+      },
+      "value": "[format('rg-{0}', parameters('environmentName'))]"
+    }
+  }
+}

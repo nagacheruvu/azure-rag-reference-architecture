@@ -1,0 +1,102 @@
+<mxfile host="app.diagrams.net" agent="askmaya-azure-redesign" type="device">
+  <diagram name="Capability Map" id="capmap-1">
+    <mxGraphModel dx="1200" dy="800" grid="0" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1600" pageHeight="1000" math="0" shadow="0" background="#0d1117">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+
+        <!-- Title -->
+        <mxCell id="title" value="Ask Maya — Agnostic Capability Map (L1 / L2 → Azure)" style="text;html=1;fontColor=#e6edf3;fontSize=22;fontStyle=1;align=left;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="40" y="24" width="900" height="40" as="geometry" />
+        </mxCell>
+
+        <!-- Layer band: Capability -->
+        <mxCell id="bandCap" value="CAPABILITY LAYER" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#161b22;strokeColor=#30363d;fontColor=#7d8590;fontSize=12;fontStyle=1;align=left;verticalAlign=top;spacingLeft=10;spacingTop=8;" vertex="1" parent="1">
+          <mxGeometry x="40" y="90" width="1520" height="300" as="geometry" />
+        </mxCell>
+
+        <!-- Layer band: Technology -->
+        <mxCell id="bandTech" value="TECHNOLOGY LAYER (Azure implementation)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#161b22;strokeColor=#30363d;fontColor=#7d8590;fontSize=12;fontStyle=1;align=left;verticalAlign=top;spacingLeft=10;spacingTop=8;" vertex="1" parent="1">
+          <mxGeometry x="40" y="430" width="1520" height="300" as="geometry" />
+        </mxCell>
+
+        <!-- Capability cards -->
+        <mxCell id="cIngest" value="Ingestion&#10;&#10;landing · parse/OCR&#10;chunk · embed" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#1f6feb;strokeColor=#388bfd;fontColor=#ffffff;fontSize=13;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="70" y="130" width="220" height="110" as="geometry" />
+        </mxCell>
+        <mxCell id="cRetr" value="Retrieval&#10;&#10;vector · hybrid&#10;semantic rerank · rewrite" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#1f6feb;strokeColor=#388bfd;fontColor=#ffffff;fontSize=13;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="310" y="130" width="220" height="110" as="geometry" />
+        </mxCell>
+        <mxCell id="cGround" value="Grounding / RAG&#10;&#10;context assembly&#10;citation · policy" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#1f6feb;strokeColor=#388bfd;fontColor=#ffffff;fontSize=13;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="550" y="130" width="220" height="110" as="geometry" />
+        </mxCell>
+        <mxCell id="cConv" value="Conversation&#10;&#10;sessions · history&#10;modes · streaming" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#1f6feb;strokeColor=#388bfd;fontColor=#ffffff;fontSize=13;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="790" y="130" width="220" height="110" as="geometry" />
+        </mxCell>
+        <mxCell id="cModel" value="Model Serving&#10;&#10;routing · load balance&#10;capacity / failover" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#1f6feb;strokeColor=#388bfd;fontColor=#ffffff;fontSize=13;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="1030" y="130" width="220" height="110" as="geometry" />
+        </mxCell>
+        <mxCell id="cGov" value="Governance / RAI&#10;&#10;content safety · evals&#10;prompt-injection · audit" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#8957e5;strokeColor=#a371f7;fontColor=#ffffff;fontSize=13;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="1270" y="130" width="220" height="110" as="geometry" />
+        </mxCell>
+        <mxCell id="cObs" value="Observability&#10;&#10;tracing · token metering&#10;SLO/SLI · cost attribution" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#238636;strokeColor=#2ea043;fontColor=#ffffff;fontSize=13;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="70" y="260" width="220" height="110" as="geometry" />
+        </mxCell>
+        <mxCell id="cScale" value="Scaling / Resiliency&#10;&#10;autoscale · multi-region&#10;DR · backpressure" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#238636;strokeColor=#2ea043;fontColor=#ffffff;fontSize=13;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="310" y="260" width="220" height="110" as="geometry" />
+        </mxCell>
+        <mxCell id="cSec" value="Security / Identity&#10;&#10;authN/Z · secrets&#10;network isolation · zero trust" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#8957e5;strokeColor=#a371f7;fontColor=#ffffff;fontSize=13;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="550" y="260" width="220" height="110" as="geometry" />
+        </mxCell>
+        <mxCell id="cCfg" value="Config / Ops&#10;&#10;env parity · feature flags&#10;IaC" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#238636;strokeColor=#2ea043;fontColor=#ffffff;fontSize=13;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="790" y="260" width="220" height="110" as="geometry" />
+        </mxCell>
+
+        <!-- Technology cards -->
+        <mxCell id="tIngest" value="Blob · Document Intelligence&#10;AI Search skillset · AOAI embeddings" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#0d2a4d;strokeColor=#1f6feb;fontColor=#c9d1d9;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="70" y="470" width="220" height="90" as="geometry" />
+        </mxCell>
+        <mxCell id="tRetr" value="Azure AI Search&#10;(vector + semantic)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#0d2a4d;strokeColor=#1f6feb;fontColor=#c9d1d9;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="310" y="470" width="220" height="90" as="geometry" />
+        </mxCell>
+        <mxCell id="tGround" value="RAG in API&#10;(context assembly + citations)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#0d2a4d;strokeColor=#1f6feb;fontColor=#c9d1d9;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="550" y="470" width="220" height="90" as="geometry" />
+        </mxCell>
+        <mxCell id="tConv" value="Container Apps API (FastAPI/SSE)&#10;Responses API + Cosmos + cache" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#0d2a4d;strokeColor=#1f6feb;fontColor=#c9d1d9;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="790" y="470" width="220" height="90" as="geometry" />
+        </mxCell>
+        <mxCell id="tModel" value="APIM + AOAI&#10;Global Standard pool" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#0d2a4d;strokeColor=#1f6feb;fontColor=#c9d1d9;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="1030" y="470" width="220" height="90" as="geometry" />
+        </mxCell>
+        <mxCell id="tGov" value="Content Safety · App Insights&#10;NIST / OWASP controls" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#2d1b4d;strokeColor=#8957e5;fontColor=#c9d1d9;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="1270" y="470" width="220" height="90" as="geometry" />
+        </mxCell>
+        <mxCell id="tObs" value="App Insights / Log Analytics" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#0d3320;strokeColor=#238636;fontColor=#c9d1d9;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="70" y="600" width="220" height="90" as="geometry" />
+        </mxCell>
+        <mxCell id="tScale" value="Front Door · Container Apps KEDA&#10;Cosmos multi-region" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#0d3320;strokeColor=#238636;fontColor=#c9d1d9;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="310" y="600" width="220" height="90" as="geometry" />
+        </mxCell>
+        <mxCell id="tSec" value="Entra ID · Managed Identity&#10;Key Vault · Private Endpoints" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#2d1b4d;strokeColor=#8957e5;fontColor=#c9d1d9;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="550" y="600" width="220" height="90" as="geometry" />
+        </mxCell>
+        <mxCell id="tCfg" value="App Configuration · Bicep / azd" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#0d3320;strokeColor=#238636;fontColor=#c9d1d9;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="790" y="600" width="220" height="90" as="geometry" />
+        </mxCell>
+
+        <!-- realization links -->
+        <mxCell id="lIngest" style="endArrow=block;dashed=1;strokeColor=#6e7681;html=1;" edge="1" parent="1" source="tIngest" target="cIngest"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="lRetr" style="endArrow=block;dashed=1;strokeColor=#6e7681;html=1;" edge="1" parent="1" source="tRetr" target="cRetr"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="lGround" style="endArrow=block;dashed=1;strokeColor=#6e7681;html=1;" edge="1" parent="1" source="tGround" target="cGround"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="lConv" style="endArrow=block;dashed=1;strokeColor=#6e7681;html=1;" edge="1" parent="1" source="tConv" target="cConv"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="lModel" style="endArrow=block;dashed=1;strokeColor=#6e7681;html=1;" edge="1" parent="1" source="tModel" target="cModel"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="lGov" style="endArrow=block;dashed=1;strokeColor=#6e7681;html=1;" edge="1" parent="1" source="tGov" target="cGov"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="lObs" style="endArrow=block;dashed=1;strokeColor=#6e7681;html=1;" edge="1" parent="1" source="tObs" target="cObs"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="lScale" style="endArrow=block;dashed=1;strokeColor=#6e7681;html=1;" edge="1" parent="1" source="tScale" target="cScale"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="lSec" style="endArrow=block;dashed=1;strokeColor=#6e7681;html=1;" edge="1" parent="1" source="tSec" target="cSec"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="lCfg" style="endArrow=block;dashed=1;strokeColor=#6e7681;html=1;" edge="1" parent="1" source="tCfg" target="cCfg"><mxGeometry relative="1" as="geometry" /></mxCell>
+
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>
